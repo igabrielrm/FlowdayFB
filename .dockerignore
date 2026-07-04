@@ -1,0 +1,9 @@
+target/
+.git/
+.idea/
+.vscode/
+logs/
+uploads/
+*.iml
+.env
+src/main/resources/application.properties
