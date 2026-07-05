@@ -27,8 +27,11 @@ public class SessionFilter extends OncePerRequestFilter {
 
         // Excluir rutas públicas
         if (path.startsWith("/login") || path.startsWith("/registro") ||
+            path.startsWith("/recuperar-contrasena") ||
             path.startsWith("/css") || path.startsWith("/js") ||
-            path.startsWith("/images") || path.startsWith("/uploads") ||
+            path.startsWith("/images") || path.startsWith("/icons") ||
+            path.startsWith("/uploads") || path.equals("/sw.js") ||
+            path.startsWith("/manifest") ||
             path.startsWith("/webjars") ||
             path.startsWith("/error")) {
             filterChain.doFilter(request, response);
@@ -45,7 +48,6 @@ public class SessionFilter extends OncePerRequestFilter {
                     usuario.getUltimoAcceso().isBefore(LocalDateTime.now().minusMinutes(5))) {
                     usuario.setUltimoAcceso(LocalDateTime.now());
                 }
-                System.out.println("📊 Usuario activo: " + usuario.getCorreo() + " - " + LocalDateTime.now());
                 filterChain.doFilter(request, response);
                 return;
             }

@@ -36,21 +36,14 @@ public class UsuarioService {
     }
 
     public Optional<Usuario> autenticar(String correo, String contrasenaPlana) {
-        System.out.println("🔍 Buscando usuario: " + correo);
         Optional<Usuario> usuarioOpt = usuarioRepository.findByCorreo(correo);
         if (usuarioOpt.isPresent()) {
             Usuario u = usuarioOpt.get();
-            System.out.println("👤 Usuario encontrado: " + u.getNombre());
-            System.out.println("🔑 Hash almacenado: " + u.getContrasena());
-            boolean matches = encoder.matches(contrasenaPlana, u.getContrasena());
-            System.out.println("✅ ¿Coincide? " + matches);
-            if ("ACTIVO".equals(u.getEstado()) && matches) {
+            if ("ACTIVO".equals(u.getEstado()) && encoder.matches(contrasenaPlana, u.getContrasena())) {
                 u.setUltimoAcceso(LocalDateTime.now());
                 usuarioRepository.save(u);
                 return Optional.of(u);
             }
-        } else {
-            System.out.println("❌ Usuario no encontrado");
         }
         return Optional.empty();
     }
@@ -65,6 +58,39 @@ public class UsuarioService {
 
     public Optional<Usuario> buscarPorId(Long id) {
         return usuarioRepository.findById(id);
+    }
+
+    public Optional<Usuario> buscarPorCorreo(String correo) {
+        return usuarioRepository.findByCorreo(correo);
+    }
+
+    /** Verifica correo + teléfono para recuperación. @return null si ok */
+    public String verificarRecuperacion(String correo, String telefono) {
+        if (correo == null || correo.isBlank()) {
+            return "Ingresa tu correo institucional.";
+        }
+        if (telefono == null || !telefonoValido(telefono.trim())) {
+            return "Ingresa tu teléfono registrado (10 dígitos).";
+        }
+        Optional<Usuario> u = usuarioRepository.findByCorreo(correo.trim());
+        if (u.isEmpty()) {
+            return "No encontramos una cuenta con ese correo.";
+        }
+        if ("ADMIN".equals(u.get().getRol())) {
+            return "Los administradores deben contactar soporte interno para restablecer acceso.";
+        }
+        String telReg = u.get().getTelefono();
+        if (telReg == null || !telReg.equals(telefono.trim())) {
+            return "El teléfono no coincide con el registrado en tu perfil.";
+        }
+        return null;
+    }
+
+    public void restablecerContrasena(Long userId, String nuevaPlana) {
+        Usuario u = usuarioRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        u.setContrasena(encoder.encode(nuevaPlana));
+        usuarioRepository.save(u);
     }
 
     public Iterable<Usuario> listarTodos() {
@@ -158,9 +184,6 @@ public class UsuarioService {
             admin.setEstado("ACTIVO");
             admin.setFechaRegistro(LocalDateTime.now());
             usuarioRepository.save(admin);
-            System.out.println("✅ Admin creado: admin@uce.edu.ec / admin123");
-        } else {
-            System.out.println("ℹ️ Admin ya existe en la base de datos.");
         }
     }
 }

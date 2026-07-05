@@ -15,7 +15,8 @@
 <div class="auth-page-content">
     <section class="auth-hero-left">
         <div class="auth-hero-inner fade-in">
-            <h1 class="auth-hero-title">Event Organizer</h1>
+            <h1 class="auth-hero-title">Event Organizer <span class="auth-hero-uce">UCE</span></h1>
+            <img th:src="@{/images/event-logo.png}" alt="Event Organizer UCE" class="auth-hero-logo-img"/>
             <p class="auth-hero-tagline">Organiza tu vida académica con claridad y enfoque.</p>
             <ul class="auth-hero-features">
                 <li>Gestiona tus tareas y entregas</li>
@@ -36,11 +37,15 @@
                 <div th:if="${param.registrado}" class="alert alert-success">
                     <span>¡Cuenta creada! Ya puedes ingresar.</span>
                 </div>
+                <div th:if="${exito}" class="alert alert-success">
+                    <span th:text="${exito}"></span>
+                </div>
                 <div th:if="${error != null and !modoAdmin}" class="alert alert-danger">
                     <span th:text="${error}"></span>
                 </div>
 
                 <form th:action="@{/login}" method="post" class="auth-form" novalidate onsubmit="return validarLogin(this)">
+                    <input type="hidden" name="modoAdmin" value="false"/>
                     <div class="form-group">
                         <label class="form-label">Correo institucional</label>
                         <input type="email" name="correo" class="form-control auth-input-lg"
@@ -54,6 +59,10 @@
                     </div>
                     <button type="submit" class="btn btn-primary btn-full btn-lg">Iniciar sesión</button>
                 </form>
+
+                <p style="text-align:center;margin-top:0.85rem;font-size:0.9rem;">
+                    <a th:href="@{/recuperar-contrasena}" style="color:var(--accent-blue);">¿Olvidaste tu contraseña?</a>
+                </p>
 
                 <div class="auth-divider"><span>o</span></div>
                 <a th:href="@{/registro}" class="btn btn-outline btn-full btn-lg">Crear cuenta</a>

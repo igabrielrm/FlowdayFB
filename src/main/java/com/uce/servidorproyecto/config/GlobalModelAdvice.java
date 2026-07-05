@@ -23,6 +23,7 @@ public class GlobalModelAdvice {
         if (usuario != null) {
             model.addAttribute("notificacionesNoLeidas",
                     notificacionService.contarNoLeidas(usuario));
+            model.addAttribute("chatUserId", usuario.getId());
             String path = httpServletRequest.getRequestURI();
             if ("ADMIN".equals(usuario.getRol()) && path != null && !path.startsWith("/admin")) {
                 model.addAttribute("adminVistaEstudiante", true);

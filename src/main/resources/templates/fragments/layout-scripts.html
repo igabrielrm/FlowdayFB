@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <body>
-<script th:fragment="layoutScripts">
+<script th:fragment="layoutScripts" th:inline="javascript">
+    window.__chatUserId = /*[[${chatUserId}]]*/ null;
+
     function toggleTheme() {
         const html = document.documentElement;
         const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
@@ -85,13 +87,31 @@
         return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    function posicionarNotifDropdown() {
+        const dropdown = document.getElementById('notifDropdown');
+        const btn = document.getElementById('btnNotificaciones');
+        if (!dropdown || !btn) return;
+        const rect = btn.getBoundingClientRect();
+        dropdown.style.position = 'fixed';
+        dropdown.style.top = Math.round(rect.bottom + 8) + 'px';
+        dropdown.style.right = Math.round(window.innerWidth - rect.right) + 'px';
+        dropdown.style.left = 'auto';
+        dropdown.style.zIndex = '20000';
+    }
+
     function toggleNotificaciones(e) {
         e.stopPropagation();
         const dropdown = document.getElementById('notifDropdown');
-        if (!dropdown) return;
+        const btn = document.getElementById('btnNotificaciones');
+        if (!dropdown || !btn) return;
         notifDropdownAbierto = !notifDropdownAbierto;
-        dropdown.classList.toggle('hidden', !notifDropdownAbierto);
-        if (notifDropdownAbierto) cargarNotificaciones();
+        if (notifDropdownAbierto) {
+            posicionarNotifDropdown();
+            dropdown.classList.remove('hidden');
+            cargarNotificaciones();
+        } else {
+            dropdown.classList.add('hidden');
+        }
     }
 
     async function abrirNotificacion(id, enlace, tipo) {
@@ -135,6 +155,18 @@
     });
 
     document.addEventListener('DOMContentLoaded', async () => {
+        const dropdown = document.getElementById('notifDropdown');
+        if (dropdown && dropdown.parentElement !== document.body) {
+            dropdown.classList.add('notif-dropdown-portal');
+            document.body.appendChild(dropdown);
+        }
+        window.addEventListener('resize', () => {
+            if (notifDropdownAbierto) posicionarNotifDropdown();
+        });
+        window.addEventListener('scroll', () => {
+            if (notifDropdownAbierto) posicionarNotifDropdown();
+        }, true);
+
         marcarNavActiva();
         if (!document.getElementById('notifBadge')) return;
         try {

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Nueva contraseña — Event Organizer UCE</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}"/>
+</head>
+<body class="auth-page-body">
+
+<div th:replace="~{fragments/auth-common :: authBackground}"></div>
+<header th:replace="~{fragments/auth-common :: authTopbar}"></header>
+
+<div class="auth-page-content">
+    <section class="auth-form-panel" style="flex:1;max-width:480px;margin:0 auto;">
+        <div class="auth-split-card fade-in">
+            <div class="auth-float-brand auth-form-logo-compact" style="margin-bottom:1.25rem;">
+                <h2>Nueva contraseña</h2>
+                <p>Identidad verificada — elige una contraseña nueva</p>
+            </div>
+
+            <div th:if="${error}" class="alert alert-danger"><span th:text="${error}"></span></div>
+
+            <form th:action="@{/recuperar-contrasena/nueva}" method="post" class="auth-form">
+                <div class="form-group">
+                    <label class="form-label">Nueva contraseña</label>
+                    <input type="password" name="contrasenaNueva" class="form-control auth-input-lg" required minlength="4" autocomplete="new-password"/>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Confirmar contraseña</label>
+                    <input type="password" name="contrasenaConfirmacion" class="form-control auth-input-lg" required minlength="4" autocomplete="new-password"/>
+                </div>
+                <button type="submit" class="btn btn-primary btn-full btn-lg">Guardar contraseña</button>
+            </form>
+
+            <a th:href="@{/login}" class="btn btn-outline btn-full btn-lg" style="margin-top:1rem;">Cancelar</a>
+        </div>
+    </section>
+</div>
+
+<script th:replace="~{fragments/auth-common :: authThemeScript}"></script>
+</body>
+</html>

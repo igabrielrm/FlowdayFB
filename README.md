@@ -24,26 +24,44 @@
 
 - **Java:** 21 o superior
 - **Maven:** 3.9+
-- **PostgreSQL:** 15+
-- **Docker:** 20.10+ (opcional)
+- **PostgreSQL:** 15+ (instalado localmente o vía Docker)
+- **Docker:** 20.10+ (opcional, incluye pgAdmin en docker-compose)
+- **Apache NetBeans:** 22+ (opcional, recomendado para el equipo)
 
 ---
 
 ## 🛠️ Instalación y ejecución
 
-### 🔹 Local (con Maven)
+### 🔹 Local (con Maven / terminal de Cursor)
 
-```bash
-# 1. Clonar el repositorio
-git clone <url-del-repositorio>
-cd servidorproyecto
+**Gabriel (Docker + terminal integrada):**
 
-# 2. Configurar base de datos
-# Crear BD: eventorganizer_uce en PostgreSQL
-
-# 3. Compilar y ejecutar
-./mvnw clean spring-boot:run
+```powershell
+cd C:\Users\Gabriel\Desktop\AVANCE12\servidorproyecto
+docker compose up postgres -d
+mvn spring-boot:run -DskipTests
 ```
+
+También puedes usar `run-docker.bat` (doble clic) o en Cursor: **Terminal → Run Task → Docker PostgreSQL + Spring Boot**.
+
+**Importante:** usa la terminal integrada de Cursor (`mvn spring-boot:run`). No uses el botón Run de NetBeans en este entorno; si el puerto 8080 ya está ocupado, detén la instancia anterior antes de volver a iniciar.
+
+### 🔹 Local con NetBeans + PostgreSQL + pgAdmin (equipo, sin Docker)
+
+1. Instalar **Java 21**, **Apache NetBeans 22+** y **PostgreSQL 15+** en Windows.
+2. Iniciar el servicio PostgreSQL (Windows Services o pgAdmin conectado a localhost).
+3. En pgAdmin: crear la base de datos `eventorganizer_uce` (codificación UTF8).
+4. Copiar `src/main/resources/application.properties.example` → `application.properties` y configurar:
+   - `spring.datasource.password=` tu contraseña de PostgreSQL local
+   - `groq.api.key=` tu key de https://console.groq.com (para la IA)
+5. En NetBeans: **File → Open Project** → seleccionar esta carpeta.
+6. Verificar que NetBeans use **JDK 21** (Project Properties → Sources).
+7. Clic derecho en el proyecto → **Run** (usa `spring-boot:run` vía Maven, configurado en `nbactions.xml`).
+8. Abrir http://localhost:8080/login
+
+Opcional: ejecutar `init-db.sql` en pgAdmin para datos demo.
+
+**Si NetBeans abre una ventana de PowerShell y se cierra:** cierra el proyecto, vuelve a abrirlo y usa Run de nuevo; el proyecto ya está configurado con `spring-boot:run` (no `exec:java`).
 
 ### 🔹 Con Docker
 

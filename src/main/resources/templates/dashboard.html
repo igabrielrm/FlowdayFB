@@ -139,7 +139,7 @@
             </div>
 
             <!-- ===== BIENESTAR BANNER ===== -->
-            <div id="bienestarBanner" class="bienestar-banner bienestar-banner-clickable glass-banner" th:if="${saturado}" style="display:none;" onclick="mostrarModal('modalPausa')" role="button" tabindex="0" onkeydown="if(event.key==='Enter')mostrarModal('modalPausa')">
+            <div id="bienestarBanner" class="bienestar-banner bienestar-banner-clickable glass-banner" th:if="${saturado}" style="display:none;" onclick="abrirModalPausaDesdeBanner()" role="button" tabindex="0" onkeydown="if(event.key==='Enter')abrirModalPausaDesdeBanner()">
                 <span class="bienestar-emoji">🧠</span>
                 <div class="bienestar-text">
                     <h3>¡Tu día está saturado! Tómate un respiro</h3>
@@ -271,35 +271,8 @@
                 </div>
             </div>
 
-            <!-- ===== MODALES ===== -->
-            <div id="modalPausa" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center;">
-                <div class="card" style="max-width:380px;width:90%;animation:fadeIn .25s ease;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-                        <h3 style="font-size:15px;font-weight:700;">⏸️ Pausa activa</h3>
-                        <button class="btn-icon" onclick="cerrarModal('modalPausa')">✕</button>
-                    </div>
-                    <p style="font-size:13px;color:var(--text2);margin-bottom:1rem;">Elige cómo quieres descansar:</p>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;">
-                        <button class="btn btn-secondary" onclick="iniciarPausa('respiracion')">Respiración</button>
-                        <button class="btn btn-secondary" onclick="iniciarPausa('estiramientos')">Estiramientos</button>
-                        <button class="btn btn-secondary" onclick="iniciarPausa('meditacion')">Meditación</button>
-                        <button class="btn btn-secondary" onclick="iniciarPausa('juego')">Juego rápido</button>
-                        <button class="btn btn-secondary" onclick="iniciarPausa('musica')">Música</button>
-                        <button class="btn btn-secondary" onclick="iniciarPausa('video')">Video corto</button>
-                    </div>
-                </div>
-            </div>
-
-            <div th:replace="~{fragments/modal-reagendar :: modalReagendar}"></div>
-            <div th:replace="~{fragments/modal-detalle-actividad :: modalDetalleActividad}"></div>
-            <div th:replace="~{fragments/modal-confirmar :: modalConfirmar}"></div>
-            <div th:replace="~{fragments/companero-virtual :: companeroModal}"></div>
-            <div th:replace="~{fragments/companero-virtual :: companeroFlotante}"></div>
-
             <!-- ===== SCRIPTS ===== -->
             <script th:inline="javascript">
-                console.log('🚀 Scripts cargados correctamente');
-
                 // ================================================================
                 // DATOS DEL BACKEND
                 // ================================================================
@@ -309,11 +282,26 @@
                 const saturado        = /*[[${saturado ?: false}]]*/ false;
                 const fechaVistaInicial = /*[[${fechaVista}]]*/ null;
 
-                const PAUSA_ENLACES = {
-                    estiramientos: 'https://www.youtube.com/watch?v=DwRR59ektIs',
-                    meditacion: 'https://www.youtube.com/watch?v=inpok4MKVLM',
-                    video: 'https://www.youtube.com/watch?v=5qap5aO4i9A',
-                    juego: 'https://www.google.com/fbx?fbx=snake_arcade'
+                const PAUSA_CONTENIDO = {
+                    estiramientos: {
+                        titulo: '🤸 Estiramientos (5 min)',
+                        embed: 'https://www.youtube.com/embed/suXVPKpNiKQ?rel=0&modestbranding=1'
+                    },
+                    meditacion: {
+                        titulo: '🧘 Meditación guiada',
+                        embed: 'https://www.youtube.com/embed/IShkpOm63gg?rel=0&modestbranding=1'
+                    }
+                };
+
+                const PAUSA_EXTERNOS = {
+                    juego: {
+                        titulo: '🎮 Juego rápido',
+                        url: 'https://play2048.com/'
+                    },
+                    video: {
+                        titulo: '📺 YouTube Shorts',
+                        url: 'https://www.youtube.com/shorts/jNQXAC9IVRw'
+                    }
                 };
 
                 let fechaVista = fechaVistaInicial ? new Date(fechaVistaInicial + 'T12:00:00') : new Date();
@@ -389,8 +377,6 @@
                     cargarActividadesDia();
                 }
 
-                console.log('📊 Datos:', { tareasHoyCount, horasHoyVal, rachaVal, saturado });
-
                 // ================================================================
                 // BIENESTAR BANNER
                 // ================================================================
@@ -414,34 +400,11 @@
                     document.documentElement.setAttribute('data-theme', saved);
                     const btn = document.getElementById('btnTema');
                     if (btn) btn.textContent = saved === 'dark' ? '☀️' : '🌙';
-                    console.log('🎨 Tema cargado:', saved);
                 })();
 
                 // ================================================================
-                // SIDEBAR
+                // PAUSAS ACTIVAS
                 // ================================================================
-                function toggleSidebar() {
-                    const sidebar = document.getElementById('sidebar');
-                    const layout = document.querySelector('.layout');
-                    if (!sidebar || !layout) return;
-                    if (window.innerWidth <= 768) {
-                        sidebar.classList.toggle('open');
-                    } else {
-                        layout.classList.toggle('sidebar-collapsed');
-                        localStorage.setItem('sidebarCollapsed', layout.classList.contains('sidebar-collapsed'));
-                    }
-                }
-
-                (function restoreSidebar() {
-                    if (localStorage.getItem('sidebarCollapsed') === 'true' && window.innerWidth > 768) {
-                        document.querySelector('.layout')?.classList.add('sidebar-collapsed');
-                    }
-                })();
-
-                // ================================================================
-                // COMPAÑERO VIRTUAL (estado inicial — se ejecuta tras cargar scripts)
-                // ================================================================
-
                 function mostrarModal(id) {
                     const modal = document.getElementById(id);
                     if (modal) modal.style.display = 'flex';
@@ -452,31 +415,82 @@
                     if (modal) modal.style.display = 'none';
                 }
 
-                function iniciarPausa(tipo) {
+                function resetModalPausa() {
+                    const menu = document.getElementById('pausaMenuView');
+                    const content = document.getElementById('pausaContentView');
+                    const frame = document.getElementById('pausaEmbedFrame');
+                    if (menu) menu.classList.remove('hidden');
+                    if (content) content.classList.add('hidden');
+                    if (frame) frame.src = '';
+                }
+
+                function cerrarModalPausa() {
+                    resetModalPausa();
                     cerrarModal('modalPausa');
-                    if (typeof cerrarModalCompanero === 'function' && tipo === 'respiracion') {
+                }
+
+                function volverMenuPausa() {
+                    const frame = document.getElementById('pausaEmbedFrame');
+                    if (frame) frame.src = '';
+                    document.getElementById('pausaContentView')?.classList.add('hidden');
+                    document.getElementById('pausaMenuView')?.classList.remove('hidden');
+                }
+
+                function registrarPausa(tipo) {
+                    fetch('/api/bienestar/pausa', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ tipo: tipo, duracion: 5 })
+                    }).catch(() => {});
+                }
+
+                function mostrarContenidoPausa(tipo) {
+                    const data = PAUSA_CONTENIDO[tipo];
+                    if (!data) return;
+                    const titulo = document.getElementById('pausaContenidoTitulo');
+                    const frame = document.getElementById('pausaEmbedFrame');
+                    if (titulo) titulo.textContent = data.titulo;
+                    if (frame) frame.src = data.embed + (data.embed.includes('?') ? '&' : '?') + 'autoplay=1';
+                    document.getElementById('pausaMenuView')?.classList.add('hidden');
+                    document.getElementById('pausaContentView')?.classList.remove('hidden');
+                    registrarPausa(tipo);
+                }
+
+                function iniciarPausa(tipo) {
+                    if (tipo === 'respiracion') {
+                        cerrarModalPausa();
                         document.querySelector('.companero-menu-btn[data-accion="respirar"]')?.click();
                         return;
                     }
-                    if (typeof cerrarModalCompanero === 'function' && tipo === 'musica') {
-                        document.querySelector('.companero-menu-btn[data-accion="lofi"]')?.click();
+                    if (tipo === 'musica') {
+                        cerrarModalPausa();
+                        if (typeof reproducirLofiInline === 'function') {
+                            reproducirLofiInline();
+                        } else {
+                            document.querySelector('.companero-menu-btn[data-accion="lofi"]')?.click();
+                        }
                         return;
                     }
-                    if (PAUSA_ENLACES[tipo]) {
-                        window.open(PAUSA_ENLACES[tipo], '_blank', 'noopener');
-                        fetch('/api/bienestar/pausa', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ tipo: tipo, duracion: 5 })
-                        }).catch(() => {});
+                    if (PAUSA_EXTERNOS[tipo]) {
+                        window.open(PAUSA_EXTERNOS[tipo].url, '_blank', 'noopener');
+                        registrarPausa(tipo);
+                        return;
+                    }
+                    if (PAUSA_CONTENIDO[tipo]) {
+                        mostrarContenidoPausa(tipo);
                         return;
                     }
                     alert('Pausa activa: descansa unos minutos antes de continuar.');
                 }
 
+                function abrirModalPausaDesdeBanner() {
+                    resetModalPausa();
+                    mostrarModal('modalPausa');
+                }
+
                 document.querySelectorAll('#modalPausa').forEach(modal => {
                     modal.addEventListener('click', function (e) {
-                        if (e.target === this) this.style.display = 'none';
+                        if (e.target === this) cerrarModalPausa();
                     });
                 });
 
@@ -502,7 +516,8 @@
                             document.getElementById('factoresEstres').innerHTML = factoresHtml;
                             document.getElementById('consejoEstres').textContent = data.consejo;
 
-                            // Actualizar mascota según nivel
+                            // Actualizar mascota según nivel (no sobrescribir si está escuchando música)
+                            if (document.getElementById('mascotaSvg')?.classList.contains('mascota-musica')) return;
                             const estado = document.getElementById('mascotaEstado');
                             const boca = document.getElementById('boca');
                             if (nivel > 70) {
@@ -525,15 +540,11 @@
                 // ================================================================
                 // INICIALIZACIÓN
                 // ================================================================
-                console.log('✅ Inicializando dashboard...');
-
-                // Barra de racha
                 setTimeout(() => {
                     const fill = document.getElementById('streakFill');
                     if (fill) {
                         const valor = Math.min(rachaVal * 10, 100);
                         fill.style.width = valor + '%';
-                        console.log('📊 Racha actualizada:', valor + '%');
                     }
                 }, 100);
 
@@ -633,6 +644,44 @@
             </div>
 
         </main>
+
+        <!-- ===== MODALES Y CAPAS FLOTANTES (fuera del page-body) ===== -->
+        <div id="modalPausa" class="modal-pausa-overlay" style="display:none;">
+            <div class="modal-pausa-card card">
+                <div id="pausaMenuView">
+                    <div class="modal-pausa-header">
+                        <h3>⏸️ Pausa activa</h3>
+                        <button type="button" class="btn-icon" onclick="cerrarModalPausa()" aria-label="Cerrar">✕</button>
+                    </div>
+                    <p class="modal-pausa-sub">Elige cómo quieres descansar:</p>
+                    <div class="modal-pausa-grid">
+                        <button type="button" class="btn btn-secondary" onclick="iniciarPausa('respiracion')">🌬️ Respiración</button>
+                        <button type="button" class="btn btn-secondary" onclick="iniciarPausa('estiramientos')">🤸 Estiramientos</button>
+                        <button type="button" class="btn btn-secondary" onclick="iniciarPausa('meditacion')">🧘 Meditación</button>
+                        <button type="button" class="btn btn-secondary" onclick="iniciarPausa('juego')">🎮 Juego rápido ↗</button>
+                        <button type="button" class="btn btn-secondary" onclick="iniciarPausa('musica')">🎵 Música</button>
+                        <button type="button" class="btn btn-secondary" onclick="iniciarPausa('video')">📺 Shorts ↗</button>
+                    </div>
+                </div>
+                <div id="pausaContentView" class="hidden">
+                    <div class="modal-pausa-header">
+                        <button type="button" class="btn btn-outline btn-sm" onclick="volverMenuPausa()">← Volver</button>
+                        <h3 id="pausaContenidoTitulo">Pausa</h3>
+                        <button type="button" class="btn-icon" onclick="cerrarModalPausa()" aria-label="Cerrar">✕</button>
+                    </div>
+                    <div class="pausa-embed-wrap">
+                        <iframe id="pausaEmbedFrame" title="Contenido de pausa activa" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                    </div>
+                    <p class="modal-pausa-hint">El contenido se reproduce aquí — no necesitas salir de la app.</p>
+                </div>
+            </div>
+        </div>
+
+        <div th:replace="~{fragments/modal-reagendar :: modalReagendar}"></div>
+        <div th:replace="~{fragments/modal-detalle-actividad :: modalDetalleActividad}"></div>
+        <div th:replace="~{fragments/modal-confirmar :: modalConfirmar}"></div>
+        <div th:replace="~{fragments/companero-virtual :: companeroModal}"></div>
+        <div th:replace="~{fragments/companero-virtual :: companeroFlotante}"></div>
     </div>
 </div>
 <script th:replace="~{fragments/layout-scripts :: layoutScripts}"></script>

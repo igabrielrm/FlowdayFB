@@ -208,33 +208,33 @@
                         </div>
                     </div>
 
-                    <!-- ===== CAMBIAR CONTRASEÑA ===== -->
-                    <div class="seccion-seguridad">
-                        <h4>🔒 Cambiar contraseña</h4>
-                        <form th:action="@{/perfil/contrasena}" method="post">
-                            <div class="form-group">
-                                <label class="form-label">Contraseña actual</label>
-                                <input type="password" name="contrasenaActual" class="form-control" required minlength="4" autocomplete="current-password"/>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label class="form-label">Nueva contraseña</label>
-                                    <input type="password" name="contrasenaNueva" class="form-control" required minlength="4" autocomplete="new-password"/>
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-label">Confirmar nueva</label>
-                                    <input type="password" name="contrasenaConfirmacion" class="form-control" required minlength="4" autocomplete="new-password"/>
-                                </div>
-                            </div>
-                            <button type="submit" class="btn btn-outline">Actualizar contraseña</button>
-                        </form>
-                    </div>
-
                     <div class="btn-actions">
                         <button type="submit" class="btn btn-primary btn-full">Guardar cambios</button>
                         <a th:href="@{/dashboard}" class="btn btn-secondary">Cancelar</a>
                     </div>
                 </form>
+
+                <!-- Cambiar contraseña (formulario separado — no anidar forms) -->
+                <div class="seccion-seguridad" style="margin-top:0;padding-top:0;border-top:none;">
+                    <h4>🔒 Cambiar contraseña</h4>
+                    <form th:action="@{/perfil/contrasena}" method="post">
+                        <div class="form-group">
+                            <label class="form-label">Contraseña actual</label>
+                            <input type="password" name="contrasenaActual" class="form-control" required minlength="4" autocomplete="current-password"/>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Nueva contraseña</label>
+                                <input type="password" name="contrasenaNueva" class="form-control" required minlength="4" autocomplete="new-password"/>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Confirmar nueva</label>
+                                <input type="password" name="contrasenaConfirmacion" class="form-control" required minlength="4" autocomplete="new-password"/>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-outline">Actualizar contraseña</button>
+                    </form>
+                </div>
             </div>
         </main>
     </div>

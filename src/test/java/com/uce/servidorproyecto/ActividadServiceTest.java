@@ -127,13 +127,15 @@ class ActividadServiceTest {
 
     @Test
     void testReagendarActividad() {
+        actividad.setTipo("REUNION_GRUPAL");
         when(actividadRepository.findById(1L)).thenReturn(Optional.of(actividad));
+        when(actividadRepository.findByUsuarioAndFechaInicio(any(), any())).thenReturn(List.of());
         when(actividadRepository.save(any(Actividad.class))).thenReturn(actividad);
 
         LocalDate nuevaFecha = LocalDate.now().plusDays(2);
         LocalTime nuevaHora = LocalTime.of(14, 0);
 
-        Actividad reagendada = actividadService.reagendarActividad(1L, nuevaFecha, nuevaHora);
+        Actividad reagendada = actividadService.reagendarActividad(usuario, 1L, nuevaFecha, nuevaHora);
 
         assertThat(reagendada.getFechaInicio()).isEqualTo(nuevaFecha);
         assertThat(reagendada.getHoraInicio()).isEqualTo(nuevaHora);

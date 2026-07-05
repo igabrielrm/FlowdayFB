@@ -136,7 +136,7 @@ public class IAService {
 
     // ===== APLICAR OPTIMIZACIÓN =====
     public void aplicarOptimizacion(List<Actividad> actividades, Map<String, Object> plan) {
-        System.out.println("✅ Optimización aplicada para " + actividades.size() + " actividades");
+        // Reservado: persistir el plan optimizado en actividades si se requiere en el futuro
     }
 
     // ===== GENERAR RECURSOS DE ESTUDIO =====

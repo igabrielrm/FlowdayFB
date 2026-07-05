@@ -80,7 +80,7 @@ class AuthControllerTest {
                 .thenReturn(Optional.of(usuario));
 
         String resultado = authController.procesarLogin(
-                "admin@uce.edu.ec", "admin123", true, session, model);
+                "admin@uce.edu.ec", "admin123", "true", session, model);
 
         assertThat(resultado).isEqualTo("redirect:/admin/dashboard");
         verify(session, times(1)).setAttribute(anyString(), any());
@@ -97,6 +97,35 @@ class AuthControllerTest {
         assertThat(resultado).isEqualTo("login");
         verify(model, times(1)).addAttribute(eq("error"), anyString());
         verify(model, times(1)).addAttribute("modoAdmin", false);
+        verify(session, never()).setAttribute(anyString(), any());
+    }
+
+    @Test
+    void testProcesarLoginAdminSinModoAdmin() {
+        usuario.setRol("ADMIN");
+        when(usuarioService.autenticar("admin@uce.edu.ec", "admin123"))
+                .thenReturn(Optional.of(usuario));
+
+        String resultado = authController.procesarLogin(
+                "admin@uce.edu.ec", "admin123", null, session, model);
+
+        assertThat(resultado).isEqualTo("login");
+        verify(model).addAttribute(eq("error"), anyString());
+        verify(model).addAttribute("modoAdmin", false);
+        verify(session, never()).setAttribute(anyString(), any());
+    }
+
+    @Test
+    void testProcesarLoginEstudianteEnModoAdmin() {
+        when(usuarioService.autenticar("juan@uce.edu.ec", "password123"))
+                .thenReturn(Optional.of(usuario));
+
+        String resultado = authController.procesarLogin(
+                "juan@uce.edu.ec", "password123", "true", session, model);
+
+        assertThat(resultado).isEqualTo("login");
+        verify(model).addAttribute(eq("error"), anyString());
+        verify(model).addAttribute("modoAdmin", true);
         verify(session, never()).setAttribute(anyString(), any());
     }
 

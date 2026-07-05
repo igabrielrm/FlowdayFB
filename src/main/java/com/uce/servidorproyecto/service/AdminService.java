@@ -4,6 +4,7 @@ import com.uce.servidorproyecto.model.Actividad;
 import com.uce.servidorproyecto.model.Usuario;
 import com.uce.servidorproyecto.repository.ActividadRepository;
 import com.uce.servidorproyecto.repository.AnuncioRepository;
+import com.uce.servidorproyecto.repository.ConexionRepository;
 import com.uce.servidorproyecto.repository.RegistroBienestarRepository;
 import com.uce.servidorproyecto.repository.UsuarioRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +32,9 @@ public class AdminService {
     private RegistroBienestarRepository registroBienestarRepository;
 
     @Autowired
+    private ConexionRepository conexionRepository;
+
+    @Autowired
     private EstresService estresService;
 
     // ===== ESTADÍSTICAS GENERALES =====
@@ -39,8 +43,9 @@ public class AdminService {
 
         // Usuarios
         stats.put("totalUsuarios", usuarioRepository.count());
-        // ✅ CAMBIADO: usar count() en lugar de countUsuariosActivos()
-        stats.put("usuariosActivos", usuarioRepository.count()); 
+        stats.put("usuariosActivos", usuarioRepository.count());
+        stats.put("totalEstudiantes", usuarioRepository.countEstudiantes());
+        stats.put("totalAdmins", usuarioRepository.countAdmins());
 
         // Actividades
         stats.put("totalActividades", actividadRepository.count());
@@ -63,6 +68,13 @@ public class AdminService {
         stats.put("promedioActividadesPorUsuario",
                 totalUsuarios > 0 ?
                 (double) actividadRepository.count() / totalUsuarios : 0);
+
+        LocalDateTime semana = LocalDateTime.now().minusDays(7);
+        stats.put("totalPausasSemana", registroBienestarRepository.countAllPausasAfter(semana));
+        stats.put("totalPomodorosSemana", registroBienestarRepository.countAllByTipoAndFechaAfter("POMODORO", semana));
+        stats.put("totalConexiones", conexionRepository.countAceptadas());
+        stats.put("actividadesPorMateria", getActividadesPorMateria());
+        stats.put("actividadesPorDia", getActividadesPorDia());
 
         return stats;
     }

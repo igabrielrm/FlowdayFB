@@ -180,24 +180,6 @@ public class ActividadService {
         return actividadRepository.save(actividad);
     }
 
-    /** @deprecated usar reagendarActividad(Usuario, Long, ...) */
-    @Transactional
-    public Actividad reagendarActividad(Long id, LocalDate nuevaFecha, LocalTime nuevaHora) {
-        Actividad actividad = actividadRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Actividad no encontrada"));
-
-        if (hayChoque(actividad.getUsuario(), nuevaFecha, nuevaHora,
-                      actividad.getDuracionMinutos(), id)) {
-            throw new RuntimeException("Conflicto de horario con otra actividad");
-        }
-
-        actividad.setFechaInicio(nuevaFecha);
-        actividad.setHoraInicio(nuevaHora);
-        actividad.setEstado("REAGENDADA");
-
-        return actividadRepository.save(actividad);
-    }
-
     // ===== TRANSACCIONES =====
     @Transactional(rollbackFor = Exception.class)
     public Actividad completarActividadConValidacion(Long id) {
@@ -289,12 +271,6 @@ public class ActividadService {
             return ax.getFechaEntrega().compareTo(ay.getFechaEntrega());
         });
         return resultado;
-    }
-
-    /** @deprecated Usar {@link #obtenerAlertasPrioridad(Usuario)} */
-    public List<Actividad> obtenerActividadesProximasAVencer(Usuario usuario) {
-        LocalDate hoy = LocalDate.now();
-        return actividadRepository.findByUsuarioAndFechaEntregaBetween(usuario, hoy, hoy.plusDays(2));
     }
 
     // ===== ACCESO Y DETALLE (API / MODALES) =====

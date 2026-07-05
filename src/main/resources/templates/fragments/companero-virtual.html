@@ -92,6 +92,42 @@
         'Confía en tu proceso — vas bien 🌱'
     ];
 
+    const CHAT_LS_KEY = () => 'companeroChat_' + (window.__chatUserId || 'invitado');
+    const CHAT_MAX_MSGS = 60;
+
+    function getChatHistory() {
+        try { return JSON.parse(localStorage.getItem(CHAT_LS_KEY()) || '[]'); }
+        catch (_) { return []; }
+    }
+
+    function saveChatHistory(history) {
+        localStorage.setItem(CHAT_LS_KEY(), JSON.stringify(history.slice(-CHAT_MAX_MSGS)));
+    }
+
+    function persistChatMessage(role, text) {
+        if (!text || role === 'loading') return;
+        const h = getChatHistory();
+        h.push({ role, text, ts: Date.now() });
+        saveChatHistory(h);
+    }
+
+    function renderChatHistory(container) {
+        if (!container) return;
+        container.innerHTML = '';
+        const history = getChatHistory();
+        if (!history.length) {
+            appendChatBubble(container, 'bot', '¡Hola! Soy tu compañero IA. ¿En qué puedo ayudarte con tus estudios?', false);
+            return;
+        }
+        history.forEach(m => appendChatBubble(container, m.role, m.text, false));
+    }
+
+    window.limpiarChatCompanero = function () {
+        localStorage.removeItem(CHAT_LS_KEY());
+        const msgs = document.getElementById('companeroChatMessagesModal');
+        if (msgs) renderChatHistory(msgs);
+    };
+
     let consejoIdx = 0;
     let respiracionInterval = null;
     let lofiActual = 'default';
@@ -106,10 +142,67 @@
     }
 
     function animarMascota() {
-        const svg = document.getElementById('mascotaSvg');
-        if (svg) {
+        const svgs = [document.getElementById('mascotaSvg'), document.getElementById('floatMascotaSvg')].filter(Boolean);
+        svgs.forEach(svg => {
+            if (svg.classList.contains('mascota-musica')) return;
             svg.style.transform = 'scale(1.08)';
             setTimeout(() => { svg.style.transform = ''; }, 200);
+        });
+    }
+
+    let companeroInitOpts = null;
+
+    function getMascotaParts() {
+        return {
+            svgs: [document.getElementById('mascotaSvg'), document.getElementById('floatMascotaSvg')].filter(Boolean),
+            bocas: [document.getElementById('boca'), document.getElementById('floatBoca')].filter(Boolean),
+            estados: [document.getElementById('mascotaEstado'), document.getElementById('floatMascotaEstado')].filter(Boolean)
+        };
+    }
+
+    const BOCA_FELIZ = 'M43 56 Q50 62 57 56';
+    const BOCA_O = 'M 50 57 m -3.5, 0 a 3.5, 4 0 1,0 7, 0 a 3.5, 4 0 1,0 -7, 0';
+
+    function activarMascotaMusica() {
+        const { svgs, bocas, estados } = getMascotaParts();
+        svgs.forEach(s => s.classList.add('mascota-musica'));
+        bocas.forEach(b => b.setAttribute('d', BOCA_O));
+        estados.forEach(e => {
+            e.textContent = e.id === 'floatMascotaEstado' ? '🎵' : '🎵 Escuchando...';
+            e.className = e.id === 'floatMascotaEstado'
+                ? 'companero-float-badge musica'
+                : 'mascota-estado feliz musica';
+        });
+        document.getElementById('companeroFloatBtn')?.classList.add('companero-float-musica');
+    }
+
+    function desactivarMascotaMusica() {
+        const { svgs, bocas } = getMascotaParts();
+        svgs.forEach(s => s.classList.remove('mascota-musica'));
+        bocas.forEach(b => b.setAttribute('d', BOCA_FELIZ));
+        document.getElementById('companeroFloatBtn')?.classList.remove('companero-float-musica');
+        if (companeroInitOpts) {
+            aplicarEstadoMascota(companeroInitOpts);
+        } else {
+            const { estados } = getMascotaParts();
+            estados.forEach(e => {
+                e.textContent = e.id === 'floatMascotaEstado' ? 'OK' : '😊 ¡Todo bien!';
+                e.className = e.id === 'floatMascotaEstado' ? 'companero-float-badge' : 'mascota-estado feliz';
+            });
+        }
+    }
+
+    function aplicarEstadoMascota(opts) {
+        const { bocas, estados } = getMascotaParts();
+        if (opts.saturado) {
+            bocas.forEach(b => b.setAttribute('d', 'M43 60 Q50 55 57 60'));
+            estados.forEach(e => {
+                e.textContent = e.id === 'floatMascotaEstado' ? '!' : 'Día cargado';
+                e.className = e.id === 'floatMascotaEstado'
+                    ? 'companero-float-badge estresado'
+                    : 'mascota-estado estresado';
+            });
+            setMensaje('Te sugiero una pausa o música lo-fi');
         }
     }
 
@@ -145,6 +238,7 @@
         audio.play().catch(() => {});
         marcarLofiActivo(tipo);
         guardarPrefs({ lofiStream: tipo, lofiPlaying: true });
+        activarMascotaMusica();
         setMensaje('Música en segundo plano — sigue navegando 🎧');
     };
 
@@ -154,11 +248,34 @@
         if (audio) audio.pause();
         if (panel) panel.classList.add('hidden');
         guardarPrefs({ lofiPlaying: false });
+        desactivarMascotaMusica();
     };
 
     window.cambiarLofi = function (tipo) {
         reproducirLofiInline(tipo);
     };
+
+    function abrirChatCompaneroModal() {
+        document.getElementById('companeroFloatMenu')?.classList.add('hidden');
+        document.getElementById('companeroChatPanel')?.classList.add('hidden');
+        document.getElementById('companeroChatPanelFloat')?.classList.add('hidden');
+        abrirModalCompanero('🤖 Chat IA — Compañero virtual', `
+            <div class="companero-chat-panel companero-chat-panel-modal">
+                <div class="companero-chat-toolbar">
+                    <button type="button" class="btn btn-outline btn-sm" onclick="limpiarChatCompanero()">Limpiar chat</button>
+                </div>
+                <div id="companeroChatMessagesModal" class="companero-chat-messages"></div>
+                <form class="companero-chat-form" onsubmit="return enviarChatCompanero(event, 'companeroChatMessagesModal', 'companeroChatInputModal')">
+                    <input type="text" id="companeroChatInputModal" class="form-control" placeholder="Pregúntame sobre estudio, organización, estrés..." maxlength="500" autocomplete="off"/>
+                    <button type="submit" class="btn btn-primary">Enviar</button>
+                </form>
+            </div>
+        `);
+        const modalCard = document.querySelector('#modalCompanero .modal-companero-card');
+        if (modalCard) modalCard.classList.add('modal-companero-chat');
+        renderChatHistory(document.getElementById('companeroChatMessagesModal'));
+        setTimeout(() => document.getElementById('companeroChatInputModal')?.focus(), 100);
+    }
 
     window.cerrarModalCompanero = function () {
         clearInterval(respiracionInterval);
@@ -166,6 +283,7 @@
         if (modal) modal.classList.add('hidden');
         const body = document.getElementById('companeroModalBody');
         if (body) body.innerHTML = '';
+        document.querySelector('#modalCompanero .modal-companero-card')?.classList.remove('modal-companero-chat');
     };
 
     function abrirModalCompanero(titulo, html) {
@@ -217,11 +335,7 @@
         } else if (accion === 'motivar') {
             setMensaje(motivaciones[Math.floor(Math.random() * motivaciones.length)]);
         } else if (accion === 'chat') {
-            if (btn.closest('#companeroFloatMenu')) {
-                toggleChatPanel('companeroChatPanelFloat', 'companeroChatMessagesFloat');
-            } else {
-                toggleChatPanel('companeroChatPanel', 'companeroChatMessages');
-            }
+            abrirChatCompaneroModal();
         }
     });
 
@@ -242,16 +356,13 @@
 
     window.initCompaneroVirtual = function (opts) {
         if (!opts) return;
-        const estado = document.getElementById('mascotaEstado') || document.getElementById('floatMascotaEstado');
-        const boca = document.getElementById('boca') || document.getElementById('floatBoca');
-        if (opts.saturado && estado && boca) {
-            boca.setAttribute('d', 'M43 60 Q50 55 57 60');
-            estado.textContent = estado.id === 'floatMascotaEstado' ? '!' : 'Día cargado';
-            estado.className = estado.id === 'floatMascotaEstado'
-                ? 'companero-float-badge estresado'
-                : 'mascota-estado estresado';
-            setMensaje('Te sugiero una pausa o música lo-fi');
+        companeroInitOpts = opts;
+        if (prefs().lofiPlaying) {
+            activarMascotaMusica();
+            return;
         }
+        aplicarEstadoMascota(opts);
+        if (opts.saturado) return;
     };
 
     function toggleChatPanel(panelId, messagesId) {
@@ -268,12 +379,14 @@
         }
     }
 
-    function appendChatBubble(container, role, text) {
+    function appendChatBubble(container, role, text, persist) {
+        if (persist === undefined) persist = container && container.id === 'companeroChatMessagesModal';
         const div = document.createElement('div');
         div.className = 'companero-chat-bubble ' + (role === 'user' ? 'chat-user' : 'chat-bot');
         div.textContent = text;
         container.appendChild(div);
         container.scrollTop = container.scrollHeight;
+        if (persist) persistChatMessage(role, text);
     }
 
     window.enviarChatCompanero = async function (e, messagesId, inputId) {
@@ -309,6 +422,7 @@
         return false;
     };
 
+    window.abrirChatCompaneroModal = abrirChatCompaneroModal;
     window.toggleChatPanel = toggleChatPanel;
 })();
 </script>

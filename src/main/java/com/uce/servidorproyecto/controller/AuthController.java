@@ -32,24 +32,89 @@ public class AuthController {
     @PostMapping("/login")
     public String procesarLogin(@RequestParam String correo,
                                 @RequestParam String contrasena,
-                                @RequestParam(required = false) Boolean modoAdmin,
+                                @RequestParam(required = false) String modoAdmin,
                                 HttpSession session,
                                 Model model) {
-        System.out.println("🔐 Intento de login: " + correo);
-
         Optional<Usuario> usuarioOpt = usuarioService.autenticar(correo, contrasena);
+        boolean accesoAdmin = "true".equalsIgnoreCase(modoAdmin);
 
         if (usuarioOpt.isPresent()) {
             Usuario usuario = usuarioOpt.get();
+            boolean esAdmin = "ADMIN".equals(usuario.getRol());
+
+            if (accesoAdmin && !esAdmin) {
+                model.addAttribute("error", "Esta cuenta no tiene permisos de administrador.");
+                model.addAttribute("modoAdmin", true);
+                return "login";
+            }
+            if (!accesoAdmin && esAdmin) {
+                model.addAttribute("error", "Los administradores deben ingresar por «Acceso administrativo».");
+                model.addAttribute("modoAdmin", false);
+                return "login";
+            }
+
             session.setAttribute("usuarioLogueado", usuario);
-            System.out.println("✅ Sesión guardada para: " + usuario.getCorreo());
-            return "ADMIN".equals(usuario.getRol()) ? "redirect:/admin/dashboard" : "redirect:/dashboard";
+            return esAdmin ? "redirect:/admin/dashboard" : "redirect:/dashboard";
         }
 
-        System.out.println("❌ Falló autenticación para: " + correo);
         model.addAttribute("error", "Correo o contraseña incorrectos");
-        model.addAttribute("modoAdmin", Boolean.TRUE.equals(modoAdmin));
+        model.addAttribute("modoAdmin", accesoAdmin);
         return "login";
+    }
+
+    @GetMapping("/recuperar-contrasena")
+    public String recuperarContrasenaForm() {
+        return "recuperar-contrasena";
+    }
+
+    @PostMapping("/recuperar-contrasena")
+    public String recuperarContrasenaVerificar(@RequestParam String correo,
+                                               @RequestParam String telefono,
+                                               HttpSession session,
+                                               RedirectAttributes ra) {
+        String error = usuarioService.verificarRecuperacion(correo, telefono);
+        if (error != null) {
+            ra.addFlashAttribute("error", error);
+            return "redirect:/recuperar-contrasena";
+        }
+        Optional<Usuario> u = usuarioService.buscarPorCorreo(correo);
+        if (u.isPresent()) {
+            session.setAttribute("resetUserId", u.get().getId());
+        }
+        return "redirect:/recuperar-contrasena/nueva";
+    }
+
+    @GetMapping("/recuperar-contrasena/nueva")
+    public String recuperarContrasenaNueva(HttpSession session, RedirectAttributes ra) {
+        if (session.getAttribute("resetUserId") == null) {
+            ra.addFlashAttribute("error", "Sesión de recuperación expirada. Intenta de nuevo.");
+            return "redirect:/recuperar-contrasena";
+        }
+        return "recuperar-contrasena-nueva";
+    }
+
+    @PostMapping("/recuperar-contrasena/nueva")
+    public String recuperarContrasenaRestablecer(@RequestParam String contrasenaNueva,
+                                                 @RequestParam String contrasenaConfirmacion,
+                                                 HttpSession session,
+                                                 RedirectAttributes ra) {
+        Long userId = (Long) session.getAttribute("resetUserId");
+        if (userId == null) {
+            ra.addFlashAttribute("error", "Sesión de recuperación expirada.");
+            return "redirect:/recuperar-contrasena";
+        }
+        if (!contrasenaNueva.equals(contrasenaConfirmacion)) {
+            ra.addFlashAttribute("error", "Las contraseñas no coinciden.");
+            return "redirect:/recuperar-contrasena/nueva";
+        }
+        if (contrasenaNueva.length() < 4) {
+            ra.addFlashAttribute("error", "La contraseña debe tener al menos 4 caracteres.");
+            return "redirect:/recuperar-contrasena/nueva";
+        }
+        usuarioService.restablecerContrasena(userId, contrasenaNueva);
+        session.removeAttribute("resetUserId");
+        ra.addFlashAttribute("exito", "Contraseña actualizada. Ya puedes iniciar sesión.");
+        return "redirect:/login";
     }
 
     // ===== REGISTRO =====

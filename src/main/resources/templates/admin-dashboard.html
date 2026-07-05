@@ -63,7 +63,10 @@
 
     <div class="main-content">
         <header class="topbar">
-            <span class="topbar-title">Panel Administrativo</span>
+            <div style="display:flex;align-items:center;gap:0.5rem;">
+                <button class="btn-icon" onclick="toggleSidebar()" aria-label="Menú">☰</button>
+                <span class="topbar-title">Panel Administrativo</span>
+            </div>
             <div class="topbar-actions">
                 <button class="btn-icon" data-theme-btn onclick="toggleTheme()">☀️</button>
             </div>
@@ -81,10 +84,10 @@
 
             <div class="admin-stats">
                 <div class="card"><div class="stat-value" th:text="${totalUsuarios}">0</div><div class="stat-label">Usuarios</div></div>
+                <div class="card"><div class="stat-value" th:text="${totalEstudiantes}">0</div><div class="stat-label">Estudiantes</div></div>
                 <div class="card"><div class="stat-value" th:text="${totalActividades}">0</div><div class="stat-label">Actividades</div></div>
-                <div class="card"><div class="stat-value" th:text="${conteoAnunciosActivos}">0</div><div class="stat-label">Anuncios activos</div></div>
+                <div class="card"><div class="stat-value" th:text="${actividadesPendientes}">0</div><div class="stat-label">Pendientes</div></div>
                 <div class="card"><div class="stat-value" th:text="${totalPomodorosSemana}">0</div><div class="stat-label">Pomodoros (7 días)</div></div>
-                <div class="card"><div class="stat-value" th:text="${#numbers.formatDecimal(promedioActividades, 1, 1)}">0</div><div class="stat-label">Actividades prom.</div></div>
             </div>
 
             <div class="admin-tabs">
@@ -223,6 +226,35 @@
 
             <!-- MÉTRICAS -->
             <div id="panel-metricas" class="admin-panel">
+                <div class="admin-grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem;">
+                    <div class="card card-info">
+                        <h3 style="font-size:1rem;font-weight:700;margin-bottom:1rem;">Actividades por materia</h3>
+                        <table class="main-table">
+                            <thead><tr><th>Materia</th><th>Total</th></tr></thead>
+                            <tbody>
+                            <tr th:each="entry : ${actividadesPorMateria}">
+                                <td th:text="${entry.key}">Materia</td>
+                                <td th:text="${entry.value}">0</td>
+                            </tr>
+                            <tr th:if="${actividadesPorMateria == null or actividadesPorMateria.isEmpty()}">
+                                <td colspan="2" style="text-align:center;color:var(--text3);">Sin datos de materias</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="card card-accent">
+                        <h3 style="font-size:1rem;font-weight:700;margin-bottom:1rem;">Actividades programadas (7 días)</h3>
+                        <table class="main-table">
+                            <thead><tr><th>Fecha</th><th>Actividades</th></tr></thead>
+                            <tbody>
+                            <tr th:each="entry : ${actividadesPorDia}">
+                                <td th:text="${entry.key}">2026-07-04</td>
+                                <td th:text="${entry.value}">0</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
                 <div class="card">
                     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;">
                         <h3 style="font-size:1rem;font-weight:700;">Top estudiantes productivos</h3>

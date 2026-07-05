@@ -63,6 +63,13 @@ public class AdminController {
         model.addAttribute("totalAnuncios", estadisticas.get("totalAnuncios"));
         model.addAttribute("conteoAnunciosActivos", estadisticas.get("anunciosActivos"));
         model.addAttribute("totalActividades", estadisticas.get("totalActividades"));
+        model.addAttribute("actividadesPendientes", estadisticas.get("actividadesPendientes"));
+        model.addAttribute("actividadesCompletadas", estadisticas.get("actividadesCompletadas"));
+        model.addAttribute("totalEstudiantes", estadisticas.get("totalEstudiantes"));
+        model.addAttribute("totalAdmins", estadisticas.get("totalAdmins"));
+        model.addAttribute("totalConexiones", estadisticas.get("totalConexiones"));
+        model.addAttribute("actividadesPorMateria", estadisticas.get("actividadesPorMateria"));
+        model.addAttribute("actividadesPorDia", estadisticas.get("actividadesPorDia"));
         model.addAttribute("promedioActividades", estadisticas.get("promedioActividadesPorUsuario"));
 
         Map<String, Object> bienestar = adminService.getMonitoreoBienestar();
