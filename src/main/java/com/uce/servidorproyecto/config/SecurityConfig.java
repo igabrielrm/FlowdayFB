@@ -87,7 +87,7 @@ public class SecurityConfig {
                     "/registro", "/registro/**",
                     "/recuperar-contrasena", "/recuperar-contrasena/**",
                     "/css/**", "/js/**", "/images/**", "/icons/**", "/uploads/**",
-                    "/sw.js", "/manifest.webmanifest", "/webjars/**",
+                    "/sw.js", "/manifest.json", "/manifest.webmanifest", "/webjars/**",
                     "/error/**", "/robots.txt",
                     "/actuator/health",
                     "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",

@@ -6,7 +6,7 @@
   "scope": "/app/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#F8FAFC",
+  "background_color": "#0f172a",
   "theme_color": "#5082ef",
   "lang": "es",
   "categories": ["productivity", "lifestyle"],

@@ -31,6 +31,7 @@ import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import { useAuth } from '../auth/AuthContext';
 import { api } from '../api/client';
 import NotificationsBell from './NotificationsBell';
+import OfflineBanner from './OfflineBanner';
 import ToastStack from './ToastStack';
 import MobileBottomNav from './MobileBottomNav';
 import VirtualCompanion from './VirtualCompanion';
@@ -147,6 +148,7 @@ export default function AppLayout() {
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', width: '100%' }}>
       <ToastStack />
+      <OfflineBanner />
 
       <Drawer
         variant={isDesktop ? 'permanent' : 'temporary'}

@@ -31,6 +31,10 @@ export default function ActivityNewPage() {
           const { estado: _estado, ...createPayload } = payload;
           const res = await api.activities.create(createPayload);
           if (!res.ok) return res.error || 'No se pudo crear la actividad';
+          if (res.meta?.queued) {
+            navigate('/activities', { state: { draftSaved: true } });
+            return null;
+          }
           navigate('/activities');
           return null;
         }}

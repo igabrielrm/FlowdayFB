@@ -28,12 +28,45 @@ import type {
   AdminWellbeing,
 } from '../types/admin';
 import type { StressReport, WellbeingStats } from '../types/wellbeing';
+import {
+  cacheApiGet,
+  cacheSessionUser,
+  isBrowserOffline,
+  readApiGet,
+} from '../offline/cache';
+import { notifyOfflineQueueChanged } from '../events';
+import {
+  applyActivityCreate,
+  applyActivityDelete,
+  applyActivityReschedule,
+  applyActivityStatus,
+  applyActivityUpdate,
+  applyScheduleCreate,
+  applyScheduleDelete,
+  applyScheduleUpdate,
+  buildOptimisticActivity,
+  buildOptimisticScheduleBlock,
+} from '../offline/optimistic';
+import {
+  allocateTempId,
+  enqueue,
+  type OfflineMutationKind,
+} from '../offline/queue';
 
 export type { NotificationItem };
 
 const API_BASE = import.meta.env.DEV ? '' : '';
 
-async function request<T>(path: string, init?: RequestInit): Promise<ApiResponse<T>> {
+const OFFLINE_MSG =
+  'Sin conexión. Conéctate para esta acción o usa los datos guardados de tu última visita.';
+
+const QUEUED_MSG = 'Guardado como borrador. Se sincronizará al reconectar.';
+
+function isGetMethod(init?: RequestInit) {
+  return (init?.method || 'GET').toUpperCase() === 'GET';
+}
+
+async function performFetch<T>(path: string, init?: RequestInit): Promise<ApiResponse<T>> {
   const res = await fetch(`${API_BASE}${path}`, {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
@@ -45,23 +78,117 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResponse
   if (res.status === 204) {
     return { ok: true, data: null, error: null };
   }
-  return res.json();
+  return (await res.json()) as ApiResponse<T>;
+}
+
+type QueuedRequestConfig<T> = {
+  kind: OfflineMutationKind;
+  label: string;
+  path: string;
+  init: RequestInit;
+  entityId?: number;
+  tempId?: number;
+  optimistic: () => ApiResponse<T>;
+};
+
+async function queuedRequest<T>(config: QueuedRequestConfig<T>): Promise<ApiResponse<T>> {
+  const queueOffline = () => {
+    const optimistic = config.optimistic();
+    if (!optimistic.ok) {
+      return optimistic;
+    }
+    enqueue({
+      kind: config.kind,
+      label: config.label,
+      method: (config.init.method || 'POST').toUpperCase() as 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+      path: config.path,
+      body: typeof config.init.body === 'string' ? config.init.body : undefined,
+      entityId: config.entityId ?? config.tempId,
+      tempId: config.tempId,
+    });
+    notifyOfflineQueueChanged();
+    return {
+      ok: true,
+      data: optimistic.data,
+      error: null,
+      meta: { offline: true, queued: true, message: QUEUED_MSG },
+    };
+  };
+
+  if (isBrowserOffline()) {
+    return queueOffline();
+  }
+
+  try {
+    const response = await performFetch<T>(config.path, config.init);
+    if (!response.ok) return response;
+    return response;
+  } catch {
+    return queueOffline();
+  }
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<ApiResponse<T>> {
+  const isGet = isGetMethod(init);
+
+  if (!isGet && isBrowserOffline()) {
+    return { ok: false, data: null, error: OFFLINE_MSG };
+  }
+
+  try {
+    const json = await performFetch<T>(path, init);
+    const isGet = isGetMethod(init);
+    if (isGet && json.ok && json.data != null) {
+      cacheApiGet(path, json.data);
+      if (path === '/api/v1/session/me') {
+        cacheSessionUser(json.data as UsuarioDto);
+      }
+    }
+    return json;
+  } catch {
+    if (isGet) {
+      const cached = readApiGet<T>(path);
+      if (cached != null) {
+        return { ok: true, data: cached, error: null, meta: { offline: true } };
+      }
+    }
+    return { ok: false, data: null, error: OFFLINE_MSG };
+  }
 }
 
 async function legacyJson<T>(path: string, init?: RequestInit): Promise<{ data: T | null; error: string | null }> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-    ...init,
-  });
-  if (res.status === 401) {
-    return { data: null, error: 'No autenticado' };
+  const isGet = isGetMethod(init);
+
+  if (!isGet && isBrowserOffline()) {
+    return { data: null, error: OFFLINE_MSG };
   }
-  const json = (await res.json()) as T & { error?: string };
-  if (json && typeof json === 'object' && 'error' in json && json.error) {
-    return { data: null, error: String(json.error) };
+
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+      ...init,
+    });
+    if (res.status === 401) {
+      return { data: null, error: 'No autenticado' };
+    }
+    const json = (await res.json()) as T & { error?: string };
+    if (json && typeof json === 'object' && 'error' in json && json.error) {
+      return { data: null, error: String(json.error) };
+    }
+    if (isGet && json != null) {
+      cacheApiGet(path, json);
+    }
+    return { data: json, error: null };
+  } catch {
+    if (isGet) {
+      const cached = readApiGet<T>(path);
+      if (cached != null) {
+        return { data: cached, error: null };
+      }
+    }
+    return { data: null, error: OFFLINE_MSG };
   }
-  return { data: json, error: null };
 }
 
 export async function downloadAdminReport(
@@ -131,37 +258,109 @@ export const api = {
 
   activities: {
     list: () => request<ActividadListItem[]>('/api/v1/activities'),
-    get: (id: number) => request<ActividadDetail>(`/api/v1/activities/${id}`),
+    get: (id: number) => {
+      if (id < 0) {
+        const cached = readApiGet<ActividadDetail>(`/api/v1/activities/${id}`);
+        if (cached) {
+          return Promise.resolve({
+            ok: true,
+            data: cached,
+            error: null,
+            meta: { offline: true, draft: true },
+          });
+        }
+        return Promise.resolve({ ok: false, data: null, error: 'Borrador no encontrado' });
+      }
+      return request<ActividadDetail>(`/api/v1/activities/${id}`);
+    },
     byDate: (fecha: string) =>
       request<ActividadListItem[]>(`/api/v1/activities/by-date?fecha=${encodeURIComponent(fecha)}`),
     byMonth: (year: number, month: number) =>
       request<ActividadListItem[]>(
         `/api/v1/activities/by-month?year=${year}&month=${month}`,
       ),
-    create: (payload: CreateActividadPayload) =>
-      request<ActividadDetail>('/api/v1/activities', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      }),
-    update: (id: number, payload: UpdateActividadPayload) =>
-      request<ActividadDetail>(`/api/v1/activities/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-      }),
-    updateStatus: (id: number, estado: string) =>
-      request<ActividadListItem>(`/api/v1/activities/${id}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ estado }),
-      }),
+    create: (payload: CreateActividadPayload) => {
+      const tempId = allocateTempId();
+      const body = JSON.stringify(payload);
+      return queuedRequest<ActividadDetail>({
+        kind: 'activity.create',
+        label: `Crear actividad: ${payload.titulo}`,
+        path: '/api/v1/activities',
+        init: { method: 'POST', body },
+        tempId,
+        optimistic: () => {
+          const detail = buildOptimisticActivity(payload, tempId);
+          applyActivityCreate(detail);
+          return { ok: true, data: detail, error: null };
+        },
+      });
+    },
+    update: (id: number, payload: UpdateActividadPayload) => {
+      const body = JSON.stringify(payload);
+      return queuedRequest<ActividadDetail>({
+        kind: 'activity.update',
+        label: `Actualizar actividad: ${payload.titulo}`,
+        path: `/api/v1/activities/${id}`,
+        init: { method: 'PUT', body },
+        entityId: id,
+        optimistic: () => {
+          applyActivityUpdate(id, payload);
+          const detail = readApiGet<ActividadDetail>(`/api/v1/activities/${id}`);
+          return detail
+            ? { ok: true, data: detail, error: null }
+            : { ok: false, data: null, error: OFFLINE_MSG };
+        },
+      });
+    },
+    updateStatus: (id: number, estado: string) => {
+      const body = JSON.stringify({ estado });
+      return queuedRequest<ActividadListItem>({
+        kind: 'activity.status',
+        label: 'Cambiar estado de actividad',
+        path: `/api/v1/activities/${id}/status`,
+        init: { method: 'PATCH', body },
+        entityId: id,
+        optimistic: () => {
+          applyActivityStatus(id, estado);
+          const list = readApiGet<ActividadListItem[]>('/api/v1/activities');
+          const item = list?.find((a) => a.id === id);
+          return item
+            ? { ok: true, data: item, error: null }
+            : { ok: false, data: null, error: OFFLINE_MSG };
+        },
+      });
+    },
     remove: (id: number) =>
-      request<void>(`/api/v1/activities/${id}`, { method: 'DELETE' }),
+      queuedRequest<void>({
+        kind: 'activity.delete',
+        label: 'Eliminar actividad',
+        path: `/api/v1/activities/${id}`,
+        init: { method: 'DELETE' },
+        entityId: id,
+        optimistic: () => {
+          applyActivityDelete(id);
+          return { ok: true, data: null, error: null };
+        },
+      }),
     priorityAlerts: () => request<PriorityAlert[]>('/api/v1/activities/priority-alerts'),
     reschedulable: () => request<ReschedulableItem[]>('/api/v1/activities/reschedulable'),
-    reschedule: (id: number, fecha: string, hora?: string) =>
-      request<ActividadDetail>(`/api/v1/activities/${id}/reschedule`, {
-        method: 'POST',
-        body: JSON.stringify({ fecha, hora: hora || null }),
-      }),
+    reschedule: (id: number, fecha: string, hora?: string) => {
+      const body = JSON.stringify({ fecha, hora: hora || null });
+      return queuedRequest<ActividadDetail>({
+        kind: 'activity.reschedule',
+        label: 'Reprogramar actividad',
+        path: `/api/v1/activities/${id}/reschedule`,
+        init: { method: 'POST', body },
+        entityId: id,
+        optimistic: () => {
+          applyActivityReschedule(id, fecha, hora);
+          const detail = readApiGet<ActividadDetail>(`/api/v1/activities/${id}`);
+          return detail
+            ? { ok: true, data: detail, error: null }
+            : { ok: false, data: null, error: OFFLINE_MSG };
+        },
+      });
+    },
   },
 
   ia: {
@@ -302,18 +501,52 @@ export const api = {
 
   schedule: {
     list: () => request<ScheduleBlock[]>('/api/v1/schedule/blocks'),
-    create: (payload: CreateScheduleBlockPayload) =>
-      request<ScheduleBlock>('/api/v1/schedule/blocks', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      }),
-    update: (id: number, payload: CreateScheduleBlockPayload) =>
-      request<ScheduleBlock>(`/api/v1/schedule/blocks/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-      }),
+    create: (payload: CreateScheduleBlockPayload) => {
+      const tempId = allocateTempId();
+      const body = JSON.stringify(payload);
+      return queuedRequest<ScheduleBlock>({
+        kind: 'schedule.create',
+        label: `Agregar materia: ${payload.materia}`,
+        path: '/api/v1/schedule/blocks',
+        init: { method: 'POST', body },
+        tempId,
+        optimistic: () => {
+          const block = buildOptimisticScheduleBlock(payload, tempId);
+          applyScheduleCreate(block);
+          return { ok: true, data: block, error: null };
+        },
+      });
+    },
+    update: (id: number, payload: CreateScheduleBlockPayload) => {
+      const body = JSON.stringify(payload);
+      return queuedRequest<ScheduleBlock>({
+        kind: 'schedule.update',
+        label: `Actualizar materia: ${payload.materia}`,
+        path: `/api/v1/schedule/blocks/${id}`,
+        init: { method: 'PUT', body },
+        entityId: id,
+        optimistic: () => {
+          applyScheduleUpdate(id, payload);
+          const list = readApiGet<ScheduleBlock[]>('/api/v1/schedule/blocks');
+          const block = list?.find((b) => b.id === id);
+          return block
+            ? { ok: true, data: block, error: null }
+            : { ok: false, data: null, error: OFFLINE_MSG };
+        },
+      });
+    },
     remove: (id: number) =>
-      request<void>(`/api/v1/schedule/blocks/${id}`, { method: 'DELETE' }),
+      queuedRequest<void>({
+        kind: 'schedule.delete',
+        label: 'Eliminar materia del horario',
+        path: `/api/v1/schedule/blocks/${id}`,
+        init: { method: 'DELETE' },
+        entityId: id,
+        optimistic: () => {
+          applyScheduleDelete(id);
+          return { ok: true, data: null, error: null };
+        },
+      }),
     alert: (minutesBefore = 15) =>
       request<ScheduleAlert | null>(`/api/v1/schedule/alert?minutesBefore=${minutesBefore}`),
   },

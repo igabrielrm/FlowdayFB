@@ -1,4 +1,4 @@
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useLocation } from 'react-router-dom';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -15,6 +15,8 @@ import {
   useTheme,
 } from '@mui/material';
 import { api } from '../api/client';
+import { OFFLINE_QUEUE_EVENT } from '../events';
+import { isTempEntityId } from '../offline/cache';
 import ActivityDetailModal from '../components/ActivityDetailModal';
 import PageHeader from '../components/mui/PageHeader';
 import PageStack from '../components/mui/PageStack';
@@ -51,6 +53,7 @@ function estadoChipColor(estado: string): 'default' | 'success' | 'warning' | 'i
 
 export default function ActivitiesPage() {
   const theme = useTheme();
+  const location = useLocation();
   const [items, setItems] = useState<ActividadListItem[]>([]);
   const [filter, setFilter] = useState<'ALL' | 'PENDIENTE' | 'EN_PROCESO' | 'COMPLETADA'>('ALL');
   const [dateFilter, setDateFilter] = useState<DateFilter>('ALL');
@@ -62,6 +65,7 @@ export default function ActivitiesPage() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [draftNotice, setDraftNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,6 +83,20 @@ export default function ActivitiesPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const onQueue = () => load();
+    window.addEventListener(OFFLINE_QUEUE_EVENT, onQueue);
+    return () => window.removeEventListener(OFFLINE_QUEUE_EVENT, onQueue);
+  }, [load]);
+
+  useEffect(() => {
+    const state = location.state as { draftSaved?: boolean } | null;
+    if (state?.draftSaved) {
+      setDraftNotice('Actividad guardada como borrador. Se sincronizará al reconectar.');
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   const stats = useMemo(() => {
     const pendientes = items.filter((a) => a.estado !== 'COMPLETADA').length;
@@ -207,6 +225,12 @@ export default function ActivitiesPage() {
         </Button>
       </Stack>
 
+      {draftNotice && (
+        <Alert severity="info" onClose={() => setDraftNotice(null)}>
+          {draftNotice}
+        </Alert>
+      )}
+
       {error && <Alert severity="error">{error}</Alert>}
 
       {loading ? (
@@ -262,6 +286,9 @@ export default function ActivitiesPage() {
                     </Typography>
                   </Box>
                   <Chip label={estadoLabel(a.estado)} size="small" color={estadoChipColor(a.estado)} />
+                  {isTempEntityId(a.id) && (
+                    <Chip label="Borrador" size="small" color="default" variant="outlined" />
+                  )}
                 </Stack>
               </CardContent>
               <CardActions>

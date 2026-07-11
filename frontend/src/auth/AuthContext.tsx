@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api, UsuarioDto } from '../api/client';
 import { applyTheme } from '../types/profile';
+import { cacheSessionUser, clearSessionUser, readSessionUser } from '../offline/cache';
 
 type AuthContextValue = {
   user: UsuarioDto | null;
@@ -18,9 +19,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refresh = useCallback(async () => {
     const res = await api.me();
-    const next = res.ok && res.data ? res.data : null;
-    setUser(next);
-    if (next?.tema) applyTheme(next.tema);
+    if (res.ok && res.data) {
+      setUser(res.data);
+      cacheSessionUser(res.data);
+      if (res.data.tema) applyTheme(res.data.tema);
+      return;
+    }
+    const cached = readSessionUser();
+    if (cached && (res.meta?.offline || !navigator.onLine)) {
+      setUser(cached);
+      if (cached.tema) applyTheme(cached.tema);
+      return;
+    }
+    setUser(null);
   }, []);
 
   useEffect(() => {
@@ -31,12 +42,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const res = await api.login(correo, contrasena);
     if (!res.ok || !res.data) return res.error || 'Error al iniciar sesión';
     setUser(res.data);
+    cacheSessionUser(res.data);
     if (res.data.tema) applyTheme(res.data.tema);
     return null;
   }, []);
 
   const logout = useCallback(async () => {
-    await api.logout();
+    if (navigator.onLine) {
+      await api.logout();
+    }
+    clearSessionUser();
     setUser(null);
   }, []);
 
