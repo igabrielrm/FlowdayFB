@@ -48,9 +48,10 @@ public class ActividadService {
     }
 
     // ===== CRUD =====
-    public void guardar(Actividad actividad) {
+    @Transactional
+    public Actividad guardar(Actividad actividad) {
         prioridadActividadService.aplicarPeso(actividad);
-        actividadRepository.save(actividad);
+        return actividadRepository.saveAndFlush(actividad);
     }
 
     public Actividad buscarPorId(Long id) {

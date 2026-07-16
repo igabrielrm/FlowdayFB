@@ -163,16 +163,19 @@ public class ActivityApiController {
             return ApiResponse.failure(String.join(". ", errores));
         }
 
+        // Persistir primero (IDENTITY) para que UsuarioActividad y logs tengan actividad con ID.
+        actividad = actividadService.guardar(actividad);
+
         if (actividad.getFechaInicio() != null && actividad.getHoraInicio() != null
                 && actividad.getDuracionMinutos() != null) {
             ResultadoReagendamiento res = reagendamientoAutomaticoService.resolverAlGuardar(
-                    usuario, actividad, null);
+                    usuario, actividad, actividad.getId());
             if (!res.isExito()) {
                 return ApiResponse.failure(res.getError());
             }
+            actividad = actividadService.guardar(actividad);
         }
 
-        actividadService.guardar(actividad);
         actividadCompartidaService.registrarPropietario(actividad, usuario);
         if (esTipoGrupal(body.tipo())) {
             actividadCompartidaService.vincularCompaneros(actividad, usuario, body.companerosIds());

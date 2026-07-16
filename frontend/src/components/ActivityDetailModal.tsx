@@ -119,25 +119,36 @@ export default function ActivityDetailModal({ activityId, onClose, onChanged }: 
 
             <Divider />
 
-            <Stack direction="row" flexWrap="wrap" gap={2}>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr' },
+                gap: { xs: 2.5, sm: 2 },
+                rowGap: { xs: 2.75, sm: 2.5 },
+              }}
+            >
               {[
                 { label: 'Fecha', value: formatDate(detail.fechaInicio) },
                 { label: 'Hora', value: detail.horaInicio?.slice(0, 5) || '—' },
                 { label: 'Prioridad', value: detail.prioridad || '—' },
-                ...(detail.materia
-                  ? [{ label: 'Materia', value: detail.materia }]
-                  : []),
+                { label: 'Materia', value: detail.materia?.trim() || '—' },
               ].map((row) => (
-                <Box key={row.label} sx={{ width: { xs: '100%', sm: 'calc(50% - 8px)' } }}>
-                  <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
+                <Box key={row.label} sx={{ minWidth: 0 }}>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    display="block"
+                    mb={0.75}
+                    sx={{ letterSpacing: 0.3, textTransform: 'uppercase', fontSize: '0.7rem' }}
+                  >
                     {row.label}
                   </Typography>
-                  <Typography variant="body1" fontWeight={600}>
+                  <Typography variant="body1" fontWeight={600} sx={{ wordBreak: 'break-word' }}>
                     {row.value}
                   </Typography>
                 </Box>
               ))}
-            </Stack>
+            </Box>
 
             {detail.descripcion && (
               <>

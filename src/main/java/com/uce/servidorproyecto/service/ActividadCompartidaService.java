@@ -30,11 +30,17 @@ public class ActividadCompartidaService {
 
     @Transactional
     public void registrarPropietario(Actividad actividad, Usuario propietario) {
+        if (actividad == null || actividad.getId() == null) {
+            throw new IllegalStateException("La actividad debe estar guardada antes de registrar el propietario");
+        }
+        if (usuarioActividadRepository.findByActividadAndUsuario(actividad, propietario).isPresent()) {
+            return;
+        }
         UsuarioActividad ua = new UsuarioActividad();
         ua.setActividad(actividad);
         ua.setUsuario(propietario);
         ua.setEsPropietario(true);
-        ua.setEstadoProgreso(actividad.getEstado());
+        ua.setEstadoProgreso(actividad.getEstado() != null ? actividad.getEstado() : "PENDIENTE");
         usuarioActividadRepository.save(ua);
     }
 
