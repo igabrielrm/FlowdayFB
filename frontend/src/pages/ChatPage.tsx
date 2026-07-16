@@ -291,32 +291,53 @@ export default function ChatPage() {
                   alignItems="center"
                   justifyContent="space-between"
                   px={2}
-                  py={1.5}
                   sx={{
                     flexShrink: 0,
                     borderBottom: 1,
                     borderColor: 'divider',
                     bgcolor: 'background.paper',
+                    pt: { xs: 1.25, md: 1.5 },
+                    pb: 1.5,
                   }}
                 >
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
+                  <Stack direction="row" alignItems="center" spacing={1.5} minWidth={0}>
                     {isMobile && (
-                      <IconButton onClick={() => setSearchParams({})} sx={{ width: 44, height: 44 }}>
-                        <ArrowBackIcon />
+                      <IconButton
+                        onClick={() => setSearchParams({})}
+                        sx={{
+                          width: 42,
+                          height: 42,
+                          border: 1,
+                          borderColor: 'divider',
+                          bgcolor: 'action.hover',
+                        }}
+                      >
+                        <ArrowBackIcon fontSize="small" />
                       </IconButton>
                     )}
                     <Avatar sx={{ width: 36, height: 36, bgcolor: 'primary.main' }}>
                       {userInitials(selectedUser.nombre)}
                     </Avatar>
-                    <Box>
-                      <Typography fontWeight={700}>{selectedUser.nombre}</Typography>
-                      <Typography variant="caption" color="text.secondary">
+                    <Box minWidth={0}>
+                      <Typography fontWeight={700} noWrap>
+                        {selectedUser.nombre}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" noWrap display="block">
                         {typingFrom === selectedId ? 'Escribiendo…' : selectedUser.correo}
                       </Typography>
                     </Box>
                   </Stack>
-                  <IconButton onClick={(e) => setMenuAnchor(e.currentTarget)}>
-                    <MoreVertIcon />
+                  <IconButton
+                    onClick={(e) => setMenuAnchor(e.currentTarget)}
+                    sx={{
+                      width: 42,
+                      height: 42,
+                      border: 1,
+                      borderColor: 'divider',
+                      bgcolor: 'action.hover',
+                    }}
+                  >
+                    <MoreVertIcon fontSize="small" />
                   </IconButton>
                 </Stack>
 

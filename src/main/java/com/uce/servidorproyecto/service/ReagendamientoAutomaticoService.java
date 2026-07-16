@@ -62,7 +62,9 @@ public class ReagendamientoAutomaticoService {
                 actividad.getFechaInicio(),
                 actividad.getHoraInicio(),
                 actividad.getDuracionMinutos(),
-                idExcluir
+                idExcluir,
+                actividad.getTipo(),
+                actividad.getMateria()
         );
 
         if (conflictos.isEmpty()) {

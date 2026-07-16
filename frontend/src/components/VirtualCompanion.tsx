@@ -205,21 +205,56 @@ export default function VirtualCompanion({ fabOnTop = false }: Props) {
           direction="row"
           alignItems="center"
           justifyContent="space-between"
-          sx={{ flexShrink: 0, borderBottom: 1, borderColor: 'divider', px: 2.5, py: 1.75 }}
+          sx={{
+            flexShrink: 0,
+            borderBottom: 1,
+            borderColor: 'divider',
+            px: 2,
+            pt: { xs: 'calc(12px + env(safe-area-inset-top))', sm: 1.75 },
+            pb: 1.5,
+            bgcolor: 'background.paper',
+          }}
         >
-          <Typography variant="h6" fontWeight={700}>
-            Compañero virtual
-          </Typography>
-          <Stack direction="row" spacing={0.5} alignItems="center">
+          <Box>
+            <Typography variant="h6" fontWeight={700} lineHeight={1.2}>
+              Compañero virtual
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Planifica y confirma cambios contigo
+            </Typography>
+          </Box>
+          <Stack direction="row" spacing={1} alignItems="center">
             {messages.length > 0 && (
               <Tooltip title="Limpiar conversación">
-                <IconButton size="small" onClick={clearChat} aria-label="Limpiar chat">
+                <IconButton
+                  onClick={clearChat}
+                  aria-label="Limpiar chat"
+                  sx={{
+                    width: 42,
+                    height: 42,
+                    border: 1,
+                    borderColor: 'divider',
+                    bgcolor: 'action.hover',
+                    '&:hover': { bgcolor: 'action.selected' },
+                  }}
+                >
                   <DeleteOutlinedIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
             )}
-            <IconButton onClick={() => setOpen(false)} aria-label="Cerrar" sx={{ ml: 0.5 }}>
-              <CloseIcon />
+            <IconButton
+              onClick={() => setOpen(false)}
+              aria-label="Cerrar"
+              sx={{
+                width: 42,
+                height: 42,
+                border: 1,
+                borderColor: 'divider',
+                bgcolor: 'action.hover',
+                '&:hover': { bgcolor: 'action.selected' },
+              }}
+            >
+              <CloseIcon fontSize="small" />
             </IconButton>
           </Stack>
         </Stack>

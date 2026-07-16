@@ -125,6 +125,9 @@ export default function ActivitiesPage() {
       );
     }
     list.sort((a, b) => {
+      const aDone = a.estado === 'COMPLETADA' ? 1 : 0;
+      const bDone = b.estado === 'COMPLETADA' ? 1 : 0;
+      if (aDone !== bDone) return aDone - bDone;
       let cmp = 0;
       if (sortKey === 'titulo') cmp = a.titulo.localeCompare(b.titulo, 'es');
       else {
@@ -136,6 +139,15 @@ export default function ActivitiesPage() {
     });
     return list;
   }, [items, filter, dateFilter, debouncedSearch, sortKey, sortDir]);
+
+  const pendingItems = useMemo(
+    () => filtered.filter((a) => a.estado !== 'COMPLETADA'),
+    [filtered],
+  );
+  const completedItems = useMemo(
+    () => filtered.filter((a) => a.estado === 'COMPLETADA'),
+    [filtered],
+  );
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -260,70 +272,128 @@ export default function ActivitiesPage() {
           </CardContent>
         </Card>
       ) : (
-        <Stack spacing={2}>
-          {filtered.map((a) => (
-            <Card key={a.id} variant="outlined">
-              <CardContent
-                component="button"
-                onClick={() => setDetailId(a.id)}
-                sx={{
-                  width: '100%',
-                  textAlign: 'left',
-                  border: 'none',
-                  bgcolor: 'transparent',
-                  cursor: 'pointer',
-                  p: 2,
-                  color: 'text.primary',
-                  '&:hover': { bgcolor: 'action.hover' },
-                }}
-              >
-                <Stack direction="row" spacing={1} alignItems="flex-start" flexWrap="wrap" useFlexGap>
-                  <Box
-                    sx={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: '50%',
-                      bgcolor: a.color || '#5082ef',
-                      mt: 0.75,
-                      flexShrink: 0,
-                    }}
-                  />
-                  <Box flex={1}>
-                    <Typography fontWeight={600} color="text.primary">{a.titulo}</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {tipoLabel(a.tipo)}
-                      {a.materia ? ` · ${a.materia}` : ''}
-                      {a.fechaInicio ? ` · ${formatDate(a.fechaInicio)}` : ''}
-                    </Typography>
-                  </Box>
-                  <Chip label={estadoLabel(a.estado)} size="small" color={estadoChipColor(a.estado)} />
-                  {isTempEntityId(a.id) && (
-                    <Chip label="Borrador" size="small" color="default" variant="outlined" />
-                  )}
-                </Stack>
-              </CardContent>
-              <CardActions>
-                {a.estado !== 'COMPLETADA' && (
-                  <Button
-                    size="small"
-                    disabled={busyId === a.id}
-                    onClick={() => changeStatus(a.id, 'COMPLETADA')}
-                  >
-                    Completar
-                  </Button>
-                )}
-                {a.esPropietario && (
-                  <Button size="small" component={RouterLink} to={`/activities/${a.id}/edit`}>
-                    Editar
-                  </Button>
-                )}
-              </CardActions>
-            </Card>
-          ))}
+        <Stack spacing={3}>
+          {pendingItems.length > 0 && (
+            <Stack spacing={2}>
+              {filter === 'ALL' && completedItems.length > 0 && (
+                <Typography variant="subtitle2" color="text.secondary" fontWeight={700} letterSpacing={0.4}>
+                  Pendientes ({pendingItems.length})
+                </Typography>
+              )}
+              {pendingItems.map((a) => (
+                <ActivityCard
+                  key={a.id}
+                  item={a}
+                  busyId={busyId}
+                  onOpen={() => setDetailId(a.id)}
+                  onComplete={() => changeStatus(a.id, 'COMPLETADA')}
+                />
+              ))}
+            </Stack>
+          )}
+
+          {completedItems.length > 0 && (
+            <Stack spacing={2}>
+              {filter === 'ALL' && (
+                <Typography
+                  variant="subtitle2"
+                  color="text.secondary"
+                  fontWeight={700}
+                  letterSpacing={0.4}
+                  sx={{ pt: pendingItems.length > 0 ? 1 : 0, borderTop: pendingItems.length > 0 ? 1 : 0, borderColor: 'divider' }}
+                >
+                  Completadas ({completedItems.length})
+                </Typography>
+              )}
+              {completedItems.map((a) => (
+                <ActivityCard
+                  key={a.id}
+                  item={a}
+                  busyId={busyId}
+                  onOpen={() => setDetailId(a.id)}
+                  onComplete={() => changeStatus(a.id, 'COMPLETADA')}
+                />
+              ))}
+            </Stack>
+          )}
         </Stack>
       )}
 
       <ActivityDetailModal activityId={detailId} onClose={() => setDetailId(null)} onChanged={load} />
     </PageStack>
+  );
+}
+
+function ActivityCard({
+  item: a,
+  busyId,
+  onOpen,
+  onComplete,
+}: {
+  item: ActividadListItem;
+  busyId: number | null;
+  onOpen: () => void;
+  onComplete: () => void;
+}) {
+  return (
+    <Card variant="outlined" sx={{ opacity: a.estado === 'COMPLETADA' ? 0.78 : 1 }}>
+      <CardContent
+        component="button"
+        onClick={onOpen}
+        sx={{
+          width: '100%',
+          textAlign: 'left',
+          border: 'none',
+          bgcolor: 'transparent',
+          cursor: 'pointer',
+          p: 2,
+          color: 'text.primary',
+          '&:hover': { bgcolor: 'action.hover' },
+        }}
+      >
+        <Stack direction="row" spacing={1} alignItems="flex-start" flexWrap="wrap" useFlexGap>
+          <Box
+            sx={{
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              bgcolor: a.color || '#5082ef',
+              mt: 0.75,
+              flexShrink: 0,
+            }}
+          />
+          <Box flex={1}>
+            <Typography
+              fontWeight={600}
+              color="text.primary"
+              sx={{ textDecoration: a.estado === 'COMPLETADA' ? 'line-through' : 'none' }}
+            >
+              {a.titulo}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {tipoLabel(a.tipo)}
+              {a.materia ? ` · ${a.materia}` : ''}
+              {a.fechaInicio ? ` · ${formatDate(a.fechaInicio)}` : ''}
+            </Typography>
+          </Box>
+          <Chip label={estadoLabel(a.estado)} size="small" color={estadoChipColor(a.estado)} />
+          {isTempEntityId(a.id) && (
+            <Chip label="Borrador" size="small" color="default" variant="outlined" />
+          )}
+        </Stack>
+      </CardContent>
+      <CardActions>
+        {a.estado !== 'COMPLETADA' && (
+          <Button size="small" disabled={busyId === a.id} onClick={onComplete}>
+            Completar
+          </Button>
+        )}
+        {a.esPropietario && (
+          <Button size="small" component={RouterLink} to={`/activities/${a.id}/edit`}>
+            Editar
+          </Button>
+        )}
+      </CardActions>
+    </Card>
   );
 }

@@ -5,6 +5,14 @@ import { StatusBar, Style } from '@capacitor/status-bar';
 import { isNative } from '../platform';
 import { exchangeNativeOAuthCode } from '../auth/nativeAuth';
 import { useAuth } from '../auth/AuthContext';
+import { THEME_EVENT } from '../theme/MuiThemeProvider';
+
+function applyStatusBarForTheme() {
+  const dark = document.documentElement.dataset.theme === 'dark';
+  // Capacitor: Style.Dark = light icons (dark bg); Style.Light = dark icons (light bg).
+  StatusBar.setStyle({ style: dark ? Style.Dark : Style.Light }).catch(() => undefined);
+  StatusBar.setBackgroundColor({ color: '#00000000' }).catch(() => undefined);
+}
 
 export default function NativeAppBridge() {
   const { refresh } = useAuth();
@@ -12,9 +20,11 @@ export default function NativeAppBridge() {
   useEffect(() => {
     if (!isNative) return;
 
-    const dark = document.documentElement.dataset.theme === 'dark';
     StatusBar.setOverlaysWebView({ overlay: true }).catch(() => undefined);
-    StatusBar.setStyle({ style: dark ? Style.Light : Style.Dark }).catch(() => undefined);
+    applyStatusBarForTheme();
+
+    const onTheme = () => applyStatusBarForTheme();
+    window.addEventListener(THEME_EVENT, onTheme);
 
     const backListener = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
       const route = window.location.hash.replace(/^#/, '') || '/';
@@ -56,6 +66,7 @@ export default function NativeAppBridge() {
     });
 
     return () => {
+      window.removeEventListener(THEME_EVENT, onTheme);
       backListener.then((listener) => listener.remove());
       urlListener.then((listener) => listener.remove());
     };

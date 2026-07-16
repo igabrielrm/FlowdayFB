@@ -124,7 +124,9 @@ export default function ActivityDetailModal({ activityId, onClose, onChanged }: 
                 { label: 'Fecha', value: formatDate(detail.fechaInicio) },
                 { label: 'Hora', value: detail.horaInicio?.slice(0, 5) || '—' },
                 { label: 'Prioridad', value: detail.prioridad || '—' },
-                { label: 'Entrega', value: formatDate(detail.fechaEntrega) },
+                ...(detail.materia
+                  ? [{ label: 'Materia', value: detail.materia }]
+                  : []),
               ].map((row) => (
                 <Box key={row.label} sx={{ width: { xs: '100%', sm: 'calc(50% - 8px)' } }}>
                   <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>

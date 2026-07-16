@@ -73,6 +73,13 @@ public class ActivityApiController {
         return "REUNION_GRUPAL".equals(tipo) || "TRABAJO_GRUPO".equals(tipo);
     }
 
+    private static int normalizeDuracion(Integer duracionMinutos) {
+        if (duracionMinutos == null || duracionMinutos <= 0) {
+            return 60;
+        }
+        return duracionMinutos;
+    }
+
     @GetMapping
     @Operation(summary = "Listar actividades del usuario")
     public ApiResponse<List<ActividadListItemDto>> list(WebRequest request) {
@@ -140,7 +147,7 @@ public class ActivityApiController {
         actividad.setTipo(body.tipo());
         actividad.setFechaInicio(body.fechaInicio());
         actividad.setHoraInicio(body.horaInicio());
-        actividad.setDuracionMinutos(body.duracionMinutos() != null ? body.duracionMinutos() : 60);
+        actividad.setDuracionMinutos(normalizeDuracion(body.duracionMinutos()));
         actividad.setMateria(body.materia());
         actividad.setPrioridad(body.prioridad() != null && !body.prioridad().isBlank()
                 ? body.prioridad() : "MEDIA");
@@ -154,6 +161,15 @@ public class ActivityApiController {
         List<String> errores = actividadService.validarActividad(actividad);
         if (!errores.isEmpty()) {
             return ApiResponse.failure(String.join(". ", errores));
+        }
+
+        if (actividad.getFechaInicio() != null && actividad.getHoraInicio() != null
+                && actividad.getDuracionMinutos() != null) {
+            ResultadoReagendamiento res = reagendamientoAutomaticoService.resolverAlGuardar(
+                    usuario, actividad, null);
+            if (!res.isExito()) {
+                return ApiResponse.failure(res.getError());
+            }
         }
 
         actividadService.guardar(actividad);
@@ -182,7 +198,7 @@ public class ActivityApiController {
         draft.setTipo(body.tipo());
         draft.setFechaInicio(body.fechaInicio());
         draft.setHoraInicio(body.horaInicio());
-        draft.setDuracionMinutos(body.duracionMinutos() != null ? body.duracionMinutos() : 60);
+        draft.setDuracionMinutos(normalizeDuracion(body.duracionMinutos()));
         draft.setMateria(body.materia());
         draft.setPrioridad(body.prioridad());
         draft.setFechaEntrega(body.fechaEntrega());

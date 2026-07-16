@@ -41,12 +41,23 @@ public class ConflictDetectionService {
 
     public boolean tieneConflictos(Usuario usuario, LocalDate fecha, LocalTime horaInicio,
                                    Integer duracionMin, Long idExcluir) {
-        return !detectarConflictos(usuario, fecha, horaInicio, duracionMin, idExcluir).isEmpty();
+        return !detectarConflictos(usuario, fecha, horaInicio, duracionMin, idExcluir, null, null).isEmpty();
     }
 
     public List<ConflictoEvento> detectarConflictos(Usuario usuario, LocalDate fecha,
                                                     LocalTime horaInicio, Integer duracionMin,
                                                     Long idExcluir) {
+        return detectarConflictos(usuario, fecha, horaInicio, duracionMin, idExcluir, null, null);
+    }
+
+    /**
+     * Detecta conflictos. Un EXAMEN de la misma materia que un bloque de horario
+     * no cuenta como choque (p. ej. examen durante la clase de esa materia).
+     */
+    public List<ConflictoEvento> detectarConflictos(Usuario usuario, LocalDate fecha,
+                                                    LocalTime horaInicio, Integer duracionMin,
+                                                    Long idExcluir, String tipoEntrante,
+                                                    String materiaEntrante) {
         List<ConflictoEvento> conflictos = new ArrayList<>();
         if (usuario == null || fecha == null || horaInicio == null || duracionMin == null || duracionMin <= 0) {
             return conflictos;
@@ -70,12 +81,20 @@ public class ConflictDetectionService {
         int diaSemana = fecha.getDayOfWeek().getValue();
         for (BloqueRecurrente bloque : bloqueRecurrenteRepository.findByUsuarioAndDiaSemana(usuario, diaSemana)) {
             if (bloque.getHoraInicio() == null || bloque.getHoraFin() == null) continue;
-            if (haySuperposicion(bloque.getHoraInicio(), bloque.getHoraFin(), horaInicio, horaFin)) {
-                conflictos.add(toConflictoBloque(bloque));
-            }
+            if (!haySuperposicion(bloque.getHoraInicio(), bloque.getHoraFin(), horaInicio, horaFin)) continue;
+            if (esExamenCompatibleConClase(tipoEntrante, materiaEntrante, bloque)) continue;
+            conflictos.add(toConflictoBloque(bloque));
         }
 
         return conflictos;
+    }
+
+    private boolean esExamenCompatibleConClase(String tipo, String materia, BloqueRecurrente bloque) {
+        if (tipo == null || !"EXAMEN".equalsIgnoreCase(tipo.trim())) return false;
+        if (materia == null || materia.isBlank() || bloque.getMateria() == null || bloque.getMateria().isBlank()) {
+            return false;
+        }
+        return materia.trim().equalsIgnoreCase(bloque.getMateria().trim());
     }
 
     public List<Actividad> obtenerActividadesDelDia(Usuario usuario, LocalDate fecha) {

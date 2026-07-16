@@ -398,15 +398,27 @@ public class AssistantService {
         LocalDate date = requiredDate(payload, "date");
         Long excludeId = action.getActividadResultadoId();
         int duration = Math.max(1, payload.path("durationMinutes").asInt(60));
+        String tipo = payload.path("type").asText(null);
+        if (tipo == null || tipo.isBlank()) {
+            tipo = payload.path("tipo").asText(null);
+        }
+        String materia = payload.path("subject").asText(null);
+        if (materia == null || materia.isBlank()) {
+            materia = payload.path("materia").asText(null);
+        }
         if (action.getTipo() == AssistantAction.Type.RESCHEDULE_ACTIVITY) {
             excludeId = requiredLong(payload, "activityId");
             Actividad current = actividadService.buscarPorId(excludeId);
             if (current != null && current.getDuracionMinutos() != null) {
                 duration = current.getDuracionMinutos();
             }
+            if (current != null) {
+                if (tipo == null || tipo.isBlank()) tipo = current.getTipo();
+                if (materia == null || materia.isBlank()) materia = current.getMateria();
+            }
         }
         return conflictDetectionService
-                .detectarConflictos(action.getUsuario(), date, time, duration, excludeId)
+                .detectarConflictos(action.getUsuario(), date, time, duration, excludeId, tipo, materia)
                 .stream()
                 .map(this::conflictText)
                 .toList();

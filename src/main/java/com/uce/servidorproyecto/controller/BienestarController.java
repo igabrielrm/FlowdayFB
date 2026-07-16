@@ -1,5 +1,6 @@
 package com.uce.servidorproyecto.controller;
 
+import com.uce.servidorproyecto.api.ApiAuthHelper;
 import com.uce.servidorproyecto.model.RegistroBienestar;
 import com.uce.servidorproyecto.model.Usuario;
 import com.uce.servidorproyecto.service.BienestarService;
@@ -27,7 +28,7 @@ public class BienestarController {
     @PostMapping("/pomodoro")
     public Map<String, Object> guardarPomodoro(@RequestBody Map<String, Object> datos,
                                                WebRequest request) {
-        Usuario usuario = (Usuario) request.getAttribute("usuarioLogueado", WebRequest.SCOPE_SESSION);
+        Usuario usuario = ApiAuthHelper.requireUser(request);
         if (usuario == null) {
             return Map.of("error", "Usuario no autenticado");
         }
@@ -47,7 +48,7 @@ public class BienestarController {
     @PostMapping("/pausa")
     public Map<String, Object> guardarPausa(@RequestBody Map<String, Object> datos,
                                             WebRequest request) {
-        Usuario usuario = (Usuario) request.getAttribute("usuarioLogueado", WebRequest.SCOPE_SESSION);
+        Usuario usuario = ApiAuthHelper.requireUser(request);
         if (usuario == null) {
             return Map.of("error", "Usuario no autenticado");
         }
@@ -67,7 +68,7 @@ public class BienestarController {
     // ===== OBTENER ESTADÍSTICAS =====
     @GetMapping("/estadisticas")
     public Map<String, Object> getEstadisticas(WebRequest request) {
-        Usuario usuario = (Usuario) request.getAttribute("usuarioLogueado", WebRequest.SCOPE_SESSION);
+        Usuario usuario = ApiAuthHelper.requireUser(request);
         if (usuario == null) {
             return Map.of("error", "Usuario no autenticado");
         }
@@ -78,7 +79,7 @@ public class BienestarController {
     @GetMapping("/estres")
     public Map<String, Object> getEstres(@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
                                          WebRequest request) {
-        Usuario usuario = (Usuario) request.getAttribute("usuarioLogueado", WebRequest.SCOPE_SESSION);
+        Usuario usuario = ApiAuthHelper.requireUser(request);
         if (usuario == null) return Map.of("error", "No autenticado");
         if (fecha == null) fecha = LocalDate.now();
         return estresService.calcularEstres(usuario, fecha);

@@ -1,11 +1,13 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Card,
   Checkbox,
+  createFilterOptions,
   FormControl,
   FormControlLabel,
   FormGroup,
@@ -50,8 +52,18 @@ type Props = {
   onCancelTo?: string;
 };
 
+type MateriaOption = string;
+
+const filterMaterias = createFilterOptions<MateriaOption>();
+
 function todayIso() {
   return localDateIso();
+}
+
+function parsePositiveInt(raw: string, fallback: number): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.round(n);
 }
 
 export default function ActivityForm({
@@ -64,7 +76,9 @@ export default function ActivityForm({
   const [tipo, setTipo] = useState(initial?.tipo ?? 'DEBER');
   const [fechaInicio, setFechaInicio] = useState(initial?.fechaInicio ?? todayIso());
   const [horaInicio, setHoraInicio] = useState(initial?.horaInicio ?? '09:00');
-  const [duracionMinutos, setDuracionMinutos] = useState(initial?.duracionMinutos ?? 60);
+  const [duracionMinutos, setDuracionMinutos] = useState<string>(
+    String(initial?.duracionMinutos ?? 60),
+  );
   const [materia, setMateria] = useState(initial?.materia ?? '');
   const [prioridad, setPrioridad] = useState(initial?.prioridad ?? 'MEDIA');
   const [descripcion, setDescripcion] = useState(initial?.descripcion ?? '');
@@ -72,8 +86,23 @@ export default function ActivityForm({
   const [companerosIds, setCompanerosIds] = useState<number[]>(initial?.companerosIds ?? []);
   const [color, setColor] = useState(initial?.color ?? '#3b82f6');
   const [connections, setConnections] = useState<UsuarioDto[]>([]);
+  const [materiasHorario, setMateriasHorario] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    api.schedule.list().then((res) => {
+      if (!res.ok || !res.data) return;
+      const unique = Array.from(
+        new Set(
+          res.data
+            .map((b) => b.materia?.trim())
+            .filter((m): m is string => !!m),
+        ),
+      ).sort((a, b) => a.localeCompare(b, 'es'));
+      setMateriasHorario(unique);
+    });
+  }, []);
 
   useEffect(() => {
     if (!isGroupActivityType(tipo)) {
@@ -85,6 +114,12 @@ export default function ActivityForm({
     });
   }, [tipo]);
 
+  const materiaOptions = useMemo(() => {
+    const set = new Set(materiasHorario);
+    if (materia.trim()) set.add(materia.trim());
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
+  }, [materiasHorario, materia]);
+
   function toggleCompanion(id: number) {
     setCompanerosIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
@@ -95,13 +130,14 @@ export default function ActivityForm({
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+    const duracion = parsePositiveInt(duracionMinutos, 60);
     const err = await onSubmit({
       titulo,
       tipo,
       fechaInicio,
       horaInicio: horaInicio || undefined,
-      duracionMinutos,
-      materia: materia || undefined,
+      duracionMinutos: duracion,
+      materia: materia.trim() || undefined,
       prioridad,
       descripcion: descripcion || undefined,
       companerosIds: isGroupActivityType(tipo) && companerosIds.length > 0 ? companerosIds : undefined,
@@ -160,10 +196,18 @@ export default function ActivityForm({
           <TextField
             label="Duración (min)"
             type="number"
-            inputProps={{ min: 15, step: 15 }}
+            inputProps={{ min: 1, step: 5 }}
             value={duracionMinutos}
-            onChange={(e) => setDuracionMinutos(Number(e.target.value))}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === '') {
+                setDuracionMinutos('');
+                return;
+              }
+              if (/^\d+$/.test(v)) setDuracionMinutos(v);
+            }}
             fullWidth
+            helperText="Vacío al enviar = 60 min"
           />
           <FormControl fullWidth>
             <InputLabel>Prioridad</InputLabel>
@@ -188,10 +232,31 @@ export default function ActivityForm({
           </FormControl>
         )}
 
-        <TextField
-          label="Materia / etiqueta (opcional)"
+        <Autocomplete
+          freeSolo
+          options={materiaOptions}
           value={materia}
-          onChange={(e) => setMateria(e.target.value)}
+          onChange={(_e, value) => setMateria(typeof value === 'string' ? value : value ?? '')}
+          onInputChange={(_e, value) => setMateria(value)}
+          filterOptions={(options, params) => {
+            const filtered = filterMaterias(options, params);
+            const input = params.inputValue.trim();
+            if (input && !options.some((o) => o.toLowerCase() === input.toLowerCase())) {
+              filtered.push(input);
+            }
+            return filtered;
+          }}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Materia"
+              helperText={
+                materiasHorario.length > 0
+                  ? 'Elige una materia de tu horario (o escribe otra)'
+                  : 'Opcional — añade materias en Horario para elegirlas aquí'
+              }
+            />
+          )}
         />
 
         <ColorSwatchPicker
