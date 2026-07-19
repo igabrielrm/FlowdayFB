@@ -188,15 +188,17 @@ export default function DashboardPage() {
 
       {recentNote && (
         <Card sx={glassSurface(theme)}>
-          <CardContent>
-            <Stack direction="row" spacing={1.5} alignItems="center" mb={2}>
+          <CardContent sx={{ pb: 2.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
               <NoteAltOutlinedIcon color="primary" />
               <Typography variant="h6" fontWeight={700}>
                 Nota reciente
               </Typography>
-            </Stack>
+            </Box>
             <Paper
               elevation={0}
+              component={RouterLink}
+              to="/notes"
               sx={{
                 p: 2,
                 borderRadius: 2,
@@ -204,10 +206,11 @@ export default function DashboardPage() {
                 border: '1.5px solid',
                 borderColor: 'divider',
                 cursor: 'pointer',
+                textDecoration: 'none',
+                color: 'inherit',
+                display: 'block',
                 '&:hover': { borderColor: 'primary.main' },
               }}
-              component={RouterLink}
-              to="/notes"
             >
               {recentNote.titulo && (
                 <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 0.5 }}>
@@ -223,6 +226,7 @@ export default function DashboardPage() {
                   WebkitBoxOrient: 'vertical',
                   overflow: 'hidden',
                   whiteSpace: 'pre-wrap',
+                  lineHeight: 1.6,
                 }}
               >
                 {recentNote.contenido || <em style={{ opacity: 0.5 }}>Nota vacía</em>}
