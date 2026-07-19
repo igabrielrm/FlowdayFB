@@ -17,7 +17,8 @@ public record ActividadListItemDto(
         Integer duracionMinutos,
         String color,
         boolean esPropietario,
-        boolean esCompartida
+        boolean esCompartida,
+        String updatedAt
 ) {
     public static ActividadListItemDto from(Actividad actividad, Usuario usuario, ActividadService service) {
         var map = service.toListaMap(actividad, usuario);
@@ -34,7 +35,8 @@ public record ActividadListItemDto(
                 actividad.getDuracionMinutos(),
                 actividad.getColor(),
                 Boolean.TRUE.equals(map.get("esPropietario")),
-                Boolean.TRUE.equals(map.get("esCompartida"))
+                Boolean.TRUE.equals(map.get("esCompartida")),
+                actividad.getUpdatedAt() != null ? actividad.getUpdatedAt().toString() : null
         );
     }
 }

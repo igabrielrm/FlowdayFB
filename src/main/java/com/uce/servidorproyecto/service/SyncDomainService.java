@@ -7,11 +7,13 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.uce.servidorproyecto.api.dto.*;
 import com.uce.servidorproyecto.model.Actividad;
 import com.uce.servidorproyecto.model.BloqueRecurrente;
+import com.uce.servidorproyecto.model.Nota;
 import com.uce.servidorproyecto.model.Notificacion;
 import com.uce.servidorproyecto.model.RegistroBienestar;
 import com.uce.servidorproyecto.model.Usuario;
 import com.uce.servidorproyecto.repository.ActividadRepository;
 import com.uce.servidorproyecto.repository.BloqueRecurrenteRepository;
+import com.uce.servidorproyecto.repository.NotaRepository;
 import com.uce.servidorproyecto.repository.NotificacionRepository;
 import com.uce.servidorproyecto.repository.UsuarioRepository;
 import org.springframework.stereotype.Service;
@@ -38,6 +40,7 @@ public class SyncDomainService {
     private final BloqueRecurrenteRepository bloqueRepository;
     private final UsuarioRepository usuarioRepository;
     private final NotificacionRepository notificacionRepository;
+    private final NotaRepository notaRepository;
     private final ActividadService actividadService;
     private final ActividadCompartidaService actividadCompartidaService;
     private final HorarioService horarioService;
@@ -52,6 +55,7 @@ public class SyncDomainService {
                              BloqueRecurrenteRepository bloqueRepository,
                              UsuarioRepository usuarioRepository,
                              NotificacionRepository notificacionRepository,
+                             NotaRepository notaRepository,
                              ActividadService actividadService,
                              ActividadCompartidaService actividadCompartidaService,
                              HorarioService horarioService,
@@ -65,6 +69,7 @@ public class SyncDomainService {
         this.bloqueRepository = bloqueRepository;
         this.usuarioRepository = usuarioRepository;
         this.notificacionRepository = notificacionRepository;
+        this.notaRepository = notaRepository;
         this.actividadService = actividadService;
         this.actividadCompartidaService = actividadCompartidaService;
         this.horarioService = horarioService;
@@ -89,6 +94,9 @@ public class SyncDomainService {
             case "schedule.create" -> createSchedule(user, payload);
             case "schedule.update" -> updateSchedule(user, payload, operation.expectedVersion());
             case "schedule.delete" -> deleteSchedule(user, payload, operation.expectedVersion());
+            case "note.create" -> createNote(user, payload);
+            case "note.update" -> updateNote(user, payload);
+            case "note.delete" -> deleteNote(user, payload);
             case "profile.update" -> updateProfile(user, payload);
             case "profile.theme" -> updateTheme(user, payload);
             case "wellbeing.pomodoro" -> savePomodoro(user, payload);
@@ -107,6 +115,21 @@ public class SyncDomainService {
         };
     }
 
+    private LocalDateTime parseUpdatedAt(JsonNode payload) {
+        if (payload.hasNonNull("updatedAt")) {
+            try {
+                String val = payload.get("updatedAt").asText();
+                if (val.contains("Z")) {
+                    return java.time.Instant.parse(val).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime();
+                }
+                return LocalDateTime.parse(val);
+            } catch (Exception ex) {
+                return LocalDateTime.now();
+            }
+        }
+        return LocalDateTime.now();
+    }
+
     private Outcome createActivity(Usuario user, JsonNode payload) {
         CreateActividadRequest body = convert(payload, CreateActividadRequest.class);
         require(body.titulo(), "El título es obligatorio");
@@ -118,6 +141,7 @@ public class SyncDomainService {
         copyActivity(a, body.titulo(), body.tipo(), body.fechaInicio(), body.horaInicio(),
                 body.duracionMinutos(), body.materia(), body.prioridad(), body.fechaEntrega(),
                 body.descripcion(), null, body.color());
+        a.setUpdatedAt(parseUpdatedAt(payload));
         validateActivity(a);
         actividadService.guardar(a);
         actividadRepository.flush();
@@ -130,8 +154,13 @@ public class SyncDomainService {
 
     private Outcome updateActivity(Usuario user, JsonNode payload, Long expectedVersion) {
         Actividad a = ownedActivity(user, entityId(payload));
-        Outcome conflict = versionConflict(a.getVersion(), expectedVersion, activityData(a, user));
-        if (conflict != null) return conflict;
+        
+        LocalDateTime clientUpdatedAt = parseUpdatedAt(payload);
+        if (a.getUpdatedAt() != null && a.getUpdatedAt().isAfter(clientUpdatedAt)) {
+            // El servidor tiene cambios más recientes, ignorar cambios y devolver estado del servidor
+            return Outcome.applied(activityData(a, user), a.getVersion());
+        }
+
         UpdateActividadRequest body = convert(payload, UpdateActividadRequest.class);
         require(body.titulo(), "El título es obligatorio");
         require(body.tipo(), "El tipo es obligatorio");
@@ -139,6 +168,7 @@ public class SyncDomainService {
         copyActivity(a, body.titulo(), body.tipo(), body.fechaInicio(), body.horaInicio(),
                 body.duracionMinutos(), body.materia(), body.prioridad(), body.fechaEntrega(),
                 body.descripcion(), body.estado(), body.color());
+        a.setUpdatedAt(clientUpdatedAt);
         validateActivity(a);
         actividadService.guardar(a);
         actividadRepository.flush();
@@ -151,24 +181,38 @@ public class SyncDomainService {
     private Outcome updateActivityStatus(Usuario user, JsonNode payload, Long expectedVersion) {
         Actividad a = activity(entityId(payload));
         if (!actividadService.puedeAcceder(user, a)) throw new IllegalArgumentException("No tienes permiso");
-        Outcome conflict = versionConflict(a.getVersion(), expectedVersion, activityData(a, user));
-        if (conflict != null) return conflict;
+        
+        LocalDateTime clientUpdatedAt = parseUpdatedAt(payload);
+        if (a.getUpdatedAt() != null && a.getUpdatedAt().isAfter(clientUpdatedAt)) {
+            return Outcome.applied(activityData(a, user), a.getVersion());
+        }
+
         String estado = text(payload, "estado");
         require(estado, "El estado es obligatorio");
         actividadService.cambiarEstado(user, a.getId(), estado);
-        actividadRepository.flush();
+        
         Actividad current = activity(a.getId());
+        current.setUpdatedAt(clientUpdatedAt);
+        actividadService.guardar(current);
+        actividadRepository.flush();
         return Outcome.applied(activityData(current, user), current.getVersion());
     }
 
     private Outcome rescheduleActivity(Usuario user, JsonNode payload, Long expectedVersion) {
         Actividad a = ownedActivity(user, entityId(payload));
-        Outcome conflict = versionConflict(a.getVersion(), expectedVersion, activityData(a, user));
-        if (conflict != null) return conflict;
+        
+        LocalDateTime clientUpdatedAt = parseUpdatedAt(payload);
+        if (a.getUpdatedAt() != null && a.getUpdatedAt().isAfter(clientUpdatedAt)) {
+            return Outcome.applied(activityData(a, user), a.getVersion());
+        }
+
         LocalDate date = value(payload, "fecha", LocalDate.class);
         LocalTime time = value(payload, "hora", LocalTime.class);
         if (date == null) throw new IllegalArgumentException("La fecha es obligatoria");
         Actividad updated = actividadService.reagendarActividad(user, a.getId(), date, time);
+        
+        updated.setUpdatedAt(clientUpdatedAt);
+        actividadService.guardar(updated);
         actividadRepository.flush();
         return Outcome.applied(activityData(updated, user), updated.getVersion());
     }
@@ -178,23 +222,36 @@ public class SyncDomainService {
         Actividad a = actividadRepository.findById(id).orElse(null);
         if (a == null) return Outcome.applied(deletedData(id), null);
         if (!actividadService.puedeEditar(user, a)) throw new IllegalArgumentException("No tienes permiso");
-        Outcome conflict = versionConflict(a.getVersion(), expectedVersion, activityData(a, user));
-        if (conflict != null) return conflict;
+        
+        LocalDateTime clientUpdatedAt = parseUpdatedAt(payload);
+        if (a.getUpdatedAt() != null && a.getUpdatedAt().isAfter(clientUpdatedAt)) {
+            // El servidor tiene cambios más recientes, el borrado se ignora
+            return Outcome.applied(activityData(a, user), a.getVersion());
+        }
+        
         actividadService.eliminar(id, user);
         return Outcome.applied(deletedData(id), null);
     }
 
     private Outcome createSchedule(Usuario user, JsonNode payload) {
         BloqueRecurrente saved = horarioService.guardar(user, schedulePayload(payload));
+        saved.setUpdatedAt(parseUpdatedAt(payload));
+        bloqueRepository.save(saved);
         bloqueRepository.flush();
         return Outcome.applied(scheduleData(saved), saved.getVersion());
     }
 
     private Outcome updateSchedule(Usuario user, JsonNode payload, Long expectedVersion) {
         BloqueRecurrente current = ownedSchedule(user, entityId(payload));
-        Outcome conflict = versionConflict(current.getVersion(), expectedVersion, scheduleData(current));
-        if (conflict != null) return conflict;
+        
+        LocalDateTime clientUpdatedAt = parseUpdatedAt(payload);
+        if (current.getUpdatedAt() != null && current.getUpdatedAt().isAfter(clientUpdatedAt)) {
+            return Outcome.applied(scheduleData(current), current.getVersion());
+        }
+
         BloqueRecurrente saved = horarioService.actualizar(user, current.getId(), schedulePayload(payload));
+        saved.setUpdatedAt(clientUpdatedAt);
+        bloqueRepository.save(saved);
         bloqueRepository.flush();
         return Outcome.applied(scheduleData(saved), saved.getVersion());
     }
@@ -204,10 +261,91 @@ public class SyncDomainService {
         BloqueRecurrente current = bloqueRepository.findById(id).orElse(null);
         if (current == null) return Outcome.applied(deletedData(id), null);
         if (!current.getUsuario().getId().equals(user.getId())) throw new IllegalArgumentException("No tienes permiso");
-        Outcome conflict = versionConflict(current.getVersion(), expectedVersion, scheduleData(current));
-        if (conflict != null) return conflict;
+        
+        LocalDateTime clientUpdatedAt = parseUpdatedAt(payload);
+        if (current.getUpdatedAt() != null && current.getUpdatedAt().isAfter(clientUpdatedAt)) {
+            return Outcome.applied(scheduleData(current), current.getVersion());
+        }
+
         horarioService.eliminar(user, id);
         return Outcome.applied(deletedData(id), null);
+    }
+
+    private Outcome createNote(Usuario user, JsonNode payload) {
+        String id = text(payload, "id");
+        if (id == null || id.isBlank()) throw new IllegalArgumentException("id es obligatorio");
+
+        Nota nota = notaRepository.findById(id).orElse(null);
+        if (nota != null) {
+            // LWW
+            LocalDateTime clientUpdatedAt = parseUpdatedAt(payload);
+            if (nota.getUpdatedAt() != null && nota.getUpdatedAt().isAfter(clientUpdatedAt)) {
+                return Outcome.applied(mapper.valueToTree(NotaDto.from(nota)), nota.getVersion());
+            }
+        } else {
+            nota = new Nota();
+            nota.setId(id);
+            nota.setUsuario(user);
+            LocalDateTime clientCreatedAt = value(payload, "createdAt", LocalDateTime.class);
+            nota.setCreatedAt(clientCreatedAt != null ? clientCreatedAt : LocalDateTime.now());
+        }
+
+        nota.setTitulo(text(payload, "titulo"));
+        nota.setContenido(text(payload, "contenido"));
+        nota.setPinned(payload.hasNonNull("pinned") && payload.get("pinned").asBoolean());
+        nota.setColor(text(payload, "color"));
+        LocalDateTime clientUpdatedAt = parseUpdatedAt(payload);
+        nota.setUpdatedAt(clientUpdatedAt != null ? clientUpdatedAt : LocalDateTime.now());
+
+        notaRepository.save(nota);
+        notaRepository.flush();
+
+        return Outcome.applied(mapper.valueToTree(NotaDto.from(nota)), nota.getVersion());
+    }
+
+    private Outcome updateNote(Usuario user, JsonNode payload) {
+        String id = text(payload, "id");
+        if (id == null || id.isBlank()) throw new IllegalArgumentException("id es obligatorio");
+
+        Nota nota = notaRepository.findById(id).orElse(null);
+        if (nota == null) {
+            return createNote(user, payload);
+        }
+
+        if (!nota.getUsuario().getId().equals(user.getId())) {
+            throw new IllegalArgumentException("No autorizado");
+        }
+
+        LocalDateTime clientUpdatedAt = parseUpdatedAt(payload);
+        if (nota.getUpdatedAt() != null && nota.getUpdatedAt().isAfter(clientUpdatedAt)) {
+            return Outcome.applied(mapper.valueToTree(NotaDto.from(nota)), nota.getVersion());
+        }
+
+        nota.setTitulo(text(payload, "titulo"));
+        nota.setContenido(text(payload, "contenido"));
+        nota.setPinned(payload.hasNonNull("pinned") && payload.get("pinned").asBoolean());
+        nota.setColor(text(payload, "color"));
+        nota.setUpdatedAt(clientUpdatedAt != null ? clientUpdatedAt : LocalDateTime.now());
+
+        notaRepository.save(nota);
+        notaRepository.flush();
+
+        return Outcome.applied(mapper.valueToTree(NotaDto.from(nota)), nota.getVersion());
+    }
+
+    private Outcome deleteNote(Usuario user, JsonNode payload) {
+        String id = text(payload, "id");
+        if (id == null || id.isBlank()) throw new IllegalArgumentException("id es obligatorio");
+
+        Nota nota = notaRepository.findById(id).orElse(null);
+        if (nota != null) {
+            if (!nota.getUsuario().getId().equals(user.getId())) {
+                throw new IllegalArgumentException("No autorizado");
+            }
+            notaRepository.delete(nota);
+        }
+
+        return Outcome.applied(mapper.valueToTree(Map.of("id", id, "deleted", true)), null);
     }
 
     private Outcome updateProfile(Usuario user, JsonNode payload) {

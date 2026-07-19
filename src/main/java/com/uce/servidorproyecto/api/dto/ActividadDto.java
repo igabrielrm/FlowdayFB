@@ -24,7 +24,8 @@ public record ActividadDto(
         String color,
         boolean esPropietario,
         boolean puedeEditar,
-        List<Long> companerosIds
+        List<Long> companerosIds,
+        java.time.LocalDateTime updatedAt
 ) {
     public static ActividadDto from(Actividad a, Usuario viewer, ActividadService service, List<Long> companerosIds) {
         if (a == null) return null;
@@ -59,7 +60,8 @@ public record ActividadDto(
                 a.getColor(),
                 esPropietario,
                 puedeEditar,
-                companerosIds != null ? companerosIds : List.of()
+                companerosIds != null ? companerosIds : List.of(),
+                a.getUpdatedAt()
         );
     }
 }

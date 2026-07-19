@@ -38,6 +38,7 @@ import type { Profile, UpdateProfilePayload } from '../types/profile';
 import type { CommunityStats, CommunityUser } from '../types/community';
 import type { CreateScheduleBlockPayload, ScheduleAlert, ScheduleBlock } from '../types/schedule';
 import type { ChatMessage, Conversation } from '../types/chat';
+import type { Note } from '../types/note';
 import type {
   AdminAnnouncement,
   AdminStats,
@@ -62,7 +63,11 @@ import {
   applyScheduleCreate,
   applyScheduleDelete,
   applyScheduleUpdate,
+  applyNoteCreate,
+  applyNoteUpdate,
+  applyNoteDelete,
   buildOptimisticActivity,
+  buildOptimisticNote,
   buildOptimisticScheduleBlock,
 } from '../offline/optimistic';
 import {
@@ -121,7 +126,7 @@ type QueuedRequestConfig<T> = {
   label: string;
   path: string;
   init: RequestInit;
-  entityId?: number;
+  entityId?: number | string;
   tempId?: number;
   expectedVersion?: number;
   optimistic: () => ApiResponse<T>;
@@ -178,7 +183,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResponse
     if (isGet && json.ok && json.data != null) {
       cacheApiGet(path, json.data);
       if (path === '/api/v1/session/me') {
-        cacheSessionUser(json.data as UsuarioDto);
+        cacheSessionUser(json.data as unknown as UsuarioDto);
       }
     }
     return json;
@@ -882,6 +887,59 @@ export const api = {
       request<ScheduleAlert | null>(`/api/v1/schedule/alert?minutesBefore=${minutesBefore}`),
   },
 
+  notes: {
+    list: () => request<Note[]>('/api/v1/notes'),
+    create: (titulo: string, contenido: string, color: string, pinned = false) => {
+      const id = crypto.randomUUID();
+      const note = buildOptimisticNote(id, titulo, contenido, color, pinned);
+      const body = JSON.stringify({ id, titulo, contenido, color, pinned, updatedAt: note.updatedAt });
+      return queuedRequest<Note>({
+        kind: 'note.create',
+        label: `Crear nota: ${titulo}`,
+        path: '/api/v1/notes',
+        init: { method: 'POST', body },
+        entityId: id,
+        optimistic: () => {
+          applyNoteCreate(note);
+          return { ok: true, data: note, error: null };
+        },
+      });
+    },
+    update: (id: string, patch: Partial<Omit<Note, 'id' | 'createdAt'>>) => {
+      const existing = readApiGet<Note[]>('/api/v1/notes')?.find((n) => n.id === id)
+        ?? readApiGet<Note>(`/api/v1/notes/${id}`);
+      const updatedAt = new Date().toISOString();
+      const body = JSON.stringify({ id, ...patch, updatedAt });
+      return queuedRequest<Note>({
+        kind: 'note.update',
+        label: `Actualizar nota`,
+        path: `/api/v1/notes/${id}`,
+        init: { method: 'PUT', body },
+        entityId: id,
+        optimistic: () => {
+          if (!existing) return { ok: false, data: null, error: 'Nota no disponible offline' };
+          applyNoteUpdate(id, patch);
+          const updated = readApiGet<Note[]>('/api/v1/notes')?.find((n) => n.id === id);
+          return updated
+            ? { ok: true, data: updated, error: null }
+            : { ok: false, data: null, error: OFFLINE_MSG };
+        },
+      });
+    },
+    remove: (id: string) =>
+      queuedRequest<void>({
+        kind: 'note.delete',
+        label: 'Eliminar nota',
+        path: `/api/v1/notes/${id}`,
+        init: { method: 'DELETE' },
+        entityId: id,
+        optimistic: () => {
+          applyNoteDelete(id);
+          return { ok: true, data: null, error: null };
+        },
+      }),
+  },
+
   admin: {
     stats: () => request<AdminStats>('/api/v1/admin/stats'),
     wellbeing: () => request<AdminWellbeing>('/api/v1/admin/wellbeing'),
@@ -920,10 +978,10 @@ export const api = {
   },
 
   bienestar: {
-    stats: () => legacyJson<WellbeingStats>('/api/bienestar/estadisticas'),
+    stats: () => request<WellbeingStats>('/api/bienestar/estadisticas'),
     stress: (fecha?: string) => {
       const qs = fecha ? `?fecha=${encodeURIComponent(fecha)}` : '';
-      return legacyJson<StressReport>(`/api/bienestar/estres${qs}`);
+      return request<StressReport>(`/api/bienestar/estres${qs}`);
     },
     savePomodoro: (duracion: number) =>
       queuedLegacyMutation(

@@ -13,6 +13,9 @@ export type OfflineMutationKind =
   | 'schedule.create'
   | 'schedule.update'
   | 'schedule.delete'
+  | 'note.create'
+  | 'note.update'
+  | 'note.delete'
   | 'profile.update'
   | 'profile.theme'
   | 'wellbeing.pomodoro'
@@ -38,7 +41,7 @@ export type OfflineMutation = {
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   body?: string;
-  entityId?: number;
+  entityId?: number | string;
   tempId?: number;
   createdAt: number;
   status: OfflineMutationStatus;
@@ -64,10 +67,10 @@ async function ensureMigrated(userId: string) {
       await dbPut('outbox', {
         ...item,
         userId,
-        status: 'PENDING',
+        status: 'PENDING' as const,
         attempts: 0,
         createdAt: item.createdAt ?? Date.now(),
-      } satisfies OfflineMutation);
+      } as OfflineMutation);
     }
     localStorage.removeItem(LEGACY_QUEUE_KEY);
   } catch {
@@ -106,13 +109,37 @@ export function allocateTempId(): number {
 
 export async function enqueue(
   mutation: Omit<OfflineMutation, 'id' | 'createdAt' | 'userId' | 'status' | 'attempts'>
-    & Partial<Pick<OfflineMutation, 'status' | 'attempts'>>,
+    & Partial<Pick<OfflineMutation, 'status' | 'attempts'>>
+    & { noteId?: string },
 ): Promise<OfflineMutation | null> {
   const userId = currentOfflineUserId();
   await ensureMigrated(userId);
   const existing = await readQueue(true);
 
-  if (mutation.entityId != null && mutation.entityId < 0 && !mutation.kind.endsWith('.create')) {
+  // Note mutations use string UUIDs — skip numeric temp-id compaction logic for them
+  if (mutation.kind.startsWith('note.')) {
+    const entry: OfflineMutation = {
+      ...mutation,
+      id: crypto.randomUUID(),
+      userId,
+      createdAt: Date.now(),
+      status: mutation.status ?? 'PENDING',
+      attempts: mutation.attempts ?? 0,
+    };
+    // Supersede same-kind + same-entity note mutations
+    const superseded = existing.find(
+      (item) =>
+        item.kind === mutation.kind &&
+        item.entityId != null &&
+        item.entityId === mutation.entityId &&
+        item.status !== 'SYNCING',
+    );
+    if (superseded) await dbDelete('outbox', superseded.id);
+    await dbPut('outbox', entry);
+    return entry;
+  }
+
+  if (mutation.entityId != null && typeof mutation.entityId === 'number' && mutation.entityId < 0 && !mutation.kind.endsWith('.create')) {
     const creation = existing.find(
       (item) => item.tempId === mutation.entityId && item.kind.endsWith('.create'),
     );
@@ -135,7 +162,7 @@ export async function enqueue(
     }
   }
 
-  if (mutation.entityId != null && mutation.entityId < 0 && mutation.kind.endsWith('.delete')) {
+  if (mutation.entityId != null && typeof mutation.entityId === 'number' && mutation.entityId < 0 && mutation.kind.endsWith('.delete')) {
     const creation = existing.find(
       (item) => item.tempId === mutation.entityId && item.kind.endsWith('.create'),
     );
@@ -157,8 +184,9 @@ export async function enqueue(
       && item.status !== 'SYNCING',
   );
   if (superseded) await dbDelete('outbox', superseded.id);
+
   const parentCreation =
-    mutation.entityId != null && mutation.entityId < 0
+    mutation.entityId != null && typeof mutation.entityId === 'number' && mutation.entityId < 0
       ? existing.find((item) => item.tempId === mutation.entityId && item.kind.endsWith('.create'))
       : undefined;
 

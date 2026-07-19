@@ -1,5 +1,6 @@
 import type { ActividadDetail } from '../types/activity';
 import type { ScheduleBlock } from '../types/schedule';
+import type { Note } from '../types/note';
 import { cacheApiGet } from './cache';
 import {
   applyActivityCreate,
@@ -12,6 +13,9 @@ import {
   applyScheduleUpdate,
   replaceActivityTempId,
   replaceScheduleTempId,
+  applyNoteCreate,
+  applyNoteUpdate,
+  applyNoteDelete,
 } from './optimistic';
 import {
   type OfflineMutation,
@@ -197,6 +201,26 @@ async function applyServerResult(mutation: OfflineMutation, data: unknown) {
       }
       break;
     }
+    case 'note.create': {
+      const note = data as Note;
+      if (note) {
+        applyNoteCreate(note);
+      }
+      break;
+    }
+    case 'note.update': {
+      const note = data as Note;
+      if (note) {
+        applyNoteUpdate(note.id, note);
+        cacheApiGet(`/api/v1/notes/${note.id}`, note);
+      }
+      break;
+    }
+    case 'note.delete':
+      if (mutation.entityId) {
+        applyNoteDelete(String(mutation.entityId));
+      }
+      break;
     default:
       break;
   }

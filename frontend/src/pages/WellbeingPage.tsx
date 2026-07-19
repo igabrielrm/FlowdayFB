@@ -18,6 +18,8 @@ import {
   useTheme,
 } from '@mui/material';
 import { api } from '../api/client';
+import { OFFLINE_QUEUE_EVENT } from '../events';
+import { readApiGet } from '../offline/cache';
 import { usePomodoroTimer } from '../hooks/usePomodoroTimer';
 import BreathingModal from '../components/BreathingModal';
 import PageHeader from '../components/mui/PageHeader';
@@ -52,22 +54,40 @@ export default function WellbeingPage() {
   const pomodoro = usePomodoroTimer(POMODORO_WORK_MIN);
 
   const refresh = useCallback(async () => {
+    setLoading(true);
+    // Load from cache first for instant UI
+    const cachedStats = readApiGet<WellbeingStats>('/api/bienestar/estadisticas');
+    const cachedStress = readApiGet<StressReport>('/api/bienestar/estres');
+    const cachedActivities = readApiGet<ActividadListItem[]>('/api/v1/activities');
+    if (cachedStats) setStats(cachedStats);
+    if (cachedStress) setStress(cachedStress);
+    if (cachedActivities) {
+      setActivities(cachedActivities.filter((a) => a.estado !== 'COMPLETADA'));
+    }
+    setLoading(false);
+    // Then fetch from server
     const [statsRes, stressRes, actRes] = await Promise.all([
       api.bienestar.stats(),
       api.bienestar.stress(),
       api.activities.list(),
     ]);
-    if (statsRes.error) setError(statsRes.error);
-    else setStats(statsRes.data);
-    if (stressRes.data) setStress(stressRes.data);
+    if (statsRes.ok && statsRes.data) setStats(statsRes.data);
+    if (stressRes.ok && stressRes.data) setStress(stressRes.data);
     if (actRes.ok && actRes.data) {
       setActivities(actRes.data.filter((a) => a.estado !== 'COMPLETADA'));
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
     refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    const onQueue = () => refresh();
+    window.addEventListener(OFFLINE_QUEUE_EVENT, onQueue);
+    return () => {
+      window.removeEventListener(OFFLINE_QUEUE_EVENT, onQueue);
+    };
   }, [refresh]);
 
   useEffect(() => {

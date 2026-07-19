@@ -269,4 +269,44 @@ export function replaceScheduleTempId(tempId: number, realId: number, block: Sch
   applyScheduleCreate({ ...block, id: realId });
 }
 
+// ─── Notes ────────────────────────────────────────────────────────────────────
+
+import type { Note } from '../types/note';
+
+const NOTES_CACHE_KEY = '/api/v1/notes';
+
+export function applyNoteCreate(note: Note) {
+  updateApiGet<Note[]>(NOTES_CACHE_KEY, (list) => [
+    ...(list ?? []).filter((n) => n.id !== note.id),
+    note,
+  ]);
+  cacheApiGet(`${NOTES_CACHE_KEY}/${note.id}`, note);
+}
+
+export function applyNoteUpdate(id: string, patch: Partial<Note>) {
+  updateApiGet<Note[]>(NOTES_CACHE_KEY, (list) =>
+    (list ?? []).map((n) => (n.id === id ? { ...n, ...patch, updatedAt: new Date().toISOString() } : n)),
+  );
+  const detail = readApiGet<Note>(`${NOTES_CACHE_KEY}/${id}`);
+  if (detail) {
+    cacheApiGet(`${NOTES_CACHE_KEY}/${id}`, { ...detail, ...patch, updatedAt: new Date().toISOString() });
+  }
+}
+
+export function applyNoteDelete(id: string) {
+  removeApiGet(`${NOTES_CACHE_KEY}/${id}`);
+  updateApiGet<Note[]>(NOTES_CACHE_KEY, (list) => (list ?? []).filter((n) => n.id !== id));
+}
+
+export function buildOptimisticNote(
+  id: string,
+  titulo: string,
+  contenido: string,
+  color: string,
+  pinned = false,
+): Note {
+  const now = new Date().toISOString();
+  return { id, titulo, contenido, color, pinned, createdAt: now, updatedAt: now };
+}
+
 export { isTempEntityId };

@@ -64,7 +64,8 @@ public class ActivityApiController {
                     actividad.getColor(),
                     true,
                     true,
-                    List.of()
+                    List.of(),
+                    actividad.getUpdatedAt()
             );
         }
     }

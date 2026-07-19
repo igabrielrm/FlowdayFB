@@ -23,6 +23,7 @@ import AccessDeniedPage from './pages/AccessDeniedPage';
 import { NotificationsProvider } from './notifications/NotificationsContext';
 import LocalRemindersBridge from './notifications/LocalRemindersBridge';
 import NativeAppBridge from './components/NativeAppBridge';
+import NotesPage from './pages/NotesPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -82,6 +83,7 @@ export default function App() {
         <Route path="wellbeing" element={<WellbeingPage />} />
         <Route path="calendar" element={<CalendarPage />} />
         <Route path="schedule" element={<SchedulePage />} />
+        <Route path="notes" element={<NotesPage />} />
       </Route>
       <Route
         path="/admin"

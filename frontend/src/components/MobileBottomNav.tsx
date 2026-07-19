@@ -18,6 +18,7 @@ import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined
 import SpaOutlinedIcon from '@mui/icons-material/SpaOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined';
+import NoteAltOutlinedIcon from '@mui/icons-material/NoteAltOutlined';
 
 const PRIMARY = [
   { value: '/', label: 'Inicio', icon: <HomeOutlinedIcon /> },
@@ -28,6 +29,7 @@ const PRIMARY = [
 
 const MORE = [
   { value: '/calendar', label: 'Calendario', icon: <CalendarMonthOutlinedIcon fontSize="small" /> },
+  { value: '/notes', label: 'Notas', icon: <NoteAltOutlinedIcon fontSize="small" /> },
   { value: '/wellbeing', label: 'Bienestar', icon: <SpaOutlinedIcon fontSize="small" /> },
   { value: '/community', label: 'Comunidad', icon: <GroupsOutlinedIcon fontSize="small" /> },
   { value: '/profile', label: 'Perfil', icon: <PersonOutlineOutlinedIcon fontSize="small" /> },

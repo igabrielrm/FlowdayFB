@@ -1,5 +1,5 @@
 export type ActividadListItem = {
-  id: number;
+  id: number | string;
   version?: number;
   titulo: string;
   tipo: string;
@@ -12,10 +12,11 @@ export type ActividadListItem = {
   color?: string | null;
   esPropietario: boolean;
   esCompartida: boolean;
+  updatedAt?: string;
 };
 
 export type ActividadDetail = {
-  id: number;
+  id: number | string;
   version?: number;
   titulo: string;
   descripcion?: string | null;
@@ -31,10 +32,11 @@ export type ActividadDetail = {
   esPropietario: boolean;
   puedeEditar: boolean;
   companerosIds: number[];
+  updatedAt?: string;
 };
 
 export type PriorityAlert = {
-  id: number;
+  id: number | string;
   titulo: string;
   tipo: string;
   motivo: string;
@@ -43,7 +45,7 @@ export type PriorityAlert = {
 };
 
 export type ReschedulableItem = {
-  id: number;
+  id: number | string;
   titulo: string;
   tipo: string;
   fechaInicio?: string | null;

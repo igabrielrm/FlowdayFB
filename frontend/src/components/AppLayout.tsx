@@ -28,6 +28,7 @@ import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import ChatOutlinedIcon from '@mui/icons-material/ChatOutlined';
 import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
+import NoteAltOutlinedIcon from '@mui/icons-material/NoteAltOutlined';
 import { useAuth } from '../auth/AuthContext';
 import { api } from '../api/client';
 import NotificationsBell from './NotificationsBell';
@@ -45,6 +46,7 @@ const NAV = [
   { to: '/activities', label: 'Actividades', end: false, icon: <TaskAltOutlinedIcon /> },
   { to: '/calendar', label: 'Calendario', end: false, icon: <CalendarMonthOutlinedIcon /> },
   { to: '/schedule', label: 'Horario', end: false, icon: <ScheduleOutlinedIcon /> },
+  { to: '/notes', label: 'Notas', end: false, icon: <NoteAltOutlinedIcon /> },
   { to: '/wellbeing', label: 'Bienestar', end: false, icon: <SpaOutlinedIcon /> },
   { to: '/community', label: 'Comunidad', end: false, icon: <GroupsOutlinedIcon /> },
   { to: '/chat', label: 'Chat', end: false, icon: <ChatOutlinedIcon /> },
