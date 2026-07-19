@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
+import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import PushPinIcon from '@mui/icons-material/PushPin';
@@ -274,9 +275,9 @@ function NoteEditorDialog({
             </IconButton>
           </Tooltip>
 
-          <Tooltip title="Cerrar">
+          <Tooltip title="Guardar y cerrar">
             <IconButton size="small" onClick={handleClose} sx={{ ml: 0.5 }}>
-              <CloseIcon fontSize="small" />
+              <CheckIcon fontSize="small" />
             </IconButton>
           </Tooltip>
         </Box>

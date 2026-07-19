@@ -177,8 +177,8 @@ export default function VirtualCompanion({ fabOnTop = false }: Props) {
           right: 16,
           zIndex: (t) => t.zIndex.speedDial,
           ...(fabOnTop
-            ? { top: { xs: 72, md: 80 } }
-            : { bottom: { xs: 'calc(64px + env(safe-area-inset-bottom))', md: 24 } }),
+            ? { top: { xs: 80, md: 90 } }
+            : { bottom: { xs: 'calc(72px + env(safe-area-inset-bottom))', md: 24 } }),
         }}
       >
         <SmartToyOutlinedIcon />

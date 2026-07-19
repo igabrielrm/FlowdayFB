@@ -22,6 +22,7 @@ import { glassButton, glassSurface } from '../theme/glass';
 import {
   WEEKDAYS,
   buildMonthGrid,
+  dayPriorityStyle,
   groupByDate,
   monthLabel,
 } from '../types/calendar';
@@ -137,6 +138,7 @@ export default function CalendarPage() {
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: { xs: 0.35, sm: 0.5 }, overflow: 'hidden' }}>
             {cells.map((cell) => {
               const dayItems = cell.date ? byDate[cell.date] || [] : [];
+              const style = cell.inMonth ? dayPriorityStyle(dayItems) : undefined;
 
               return (
                 <Button
@@ -158,6 +160,7 @@ export default function CalendarPage() {
                     bgcolor: 'background.paper',
                     color: 'text.primary',
                     overflow: 'hidden',
+                    ...style,
                   }}
                 >
                   <Typography
