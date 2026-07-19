@@ -17,6 +17,8 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { api } from '../api/client';
+import { OFFLINE_QUEUE_EVENT } from '../events';
+import { readApiGet } from '../offline/cache';
 import ActivityDetailModal from '../components/ActivityDetailModal';
 import RescheduleModal from '../components/RescheduleModal';
 import PageHeader from '../components/mui/PageHeader';
@@ -59,14 +61,19 @@ export default function DashboardPage() {
   }, []);
 
   const loadDay = useCallback(async () => {
-    setLoading(true);
+    // Load from cache first for instant UI
+    const cachedDay = readApiGet<ActividadListItem[]>(`/api/v1/activities/by-date?fecha=${viewDate}`);
+    const cachedSched = readApiGet<ScheduleAlert>('/api/v1/schedule/alert');
+    if (cachedDay) setDayItems(cachedDay);
+    if (cachedSched) setScheduleAlert(cachedSched);
+    setLoading(false);
+    // Then fetch from server in background
     const [dayRes, schedRes] = await Promise.all([
       api.activities.byDate(viewDate),
       api.schedule.alert(),
     ]);
     if (dayRes.ok && dayRes.data) setDayItems(dayRes.data);
     if (schedRes.ok) setScheduleAlert(schedRes.data as ScheduleAlert | null);
-    setLoading(false);
   }, [viewDate]);
 
   useEffect(() => {
@@ -76,6 +83,17 @@ export default function DashboardPage() {
   useEffect(() => {
     loadDay();
   }, [loadDay]);
+
+  useEffect(() => {
+    const onQueue = () => {
+      loadAlerts();
+      loadDay();
+    };
+    window.addEventListener(OFFLINE_QUEUE_EVENT, onQueue);
+    return () => {
+      window.removeEventListener(OFFLINE_QUEUE_EVENT, onQueue);
+    };
+  }, [loadAlerts, loadDay]);
 
   const urgentAlerts = alerts;
 

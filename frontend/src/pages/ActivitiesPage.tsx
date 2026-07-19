@@ -16,7 +16,7 @@ import {
 } from '@mui/material';
 import { api } from '../api/client';
 import { ASSISTANT_ACTION_EVENT, OFFLINE_QUEUE_EVENT } from '../events';
-import { isTempEntityId } from '../offline/cache';
+import { isTempEntityId, readApiGet } from '../offline/cache';
 import ActivityDetailModal from '../components/ActivityDetailModal';
 import PageHeader from '../components/mui/PageHeader';
 import PageStack from '../components/mui/PageStack';
@@ -65,14 +65,22 @@ export default function ActivitiesPage() {
   const [draftNotice, setDraftNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    // Load from cache first for instant UI
+    const cached = readApiGet<ActividadListItem[]>('/api/v1/activities');
+    if (cached) {
+      setItems(cached);
+      setLoading(false);
+    }
+    // Then fetch from server in background
     const res = await api.activities.list();
     if (!res.ok || !res.data) {
-      setError(res.error || 'No se pudieron cargar las actividades');
-      setItems([]);
+      if (!cached) {
+        setError(res.error || 'No se pudieron cargar las actividades');
+        setItems([]);
+      }
     } else {
       setItems(res.data);
+      setError(null);
     }
     setLoading(false);
   }, []);

@@ -20,20 +20,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    // First try to load from cache for instant UI
+    const cached = readSessionUser();
+    if (cached) {
+      setUser(cached);
+      if (cached.tema) applyTheme(cached.tema);
+    }
+    // Then try to fetch from server in background
     const res = await api.me();
     if (res.ok && res.data) {
       setUser(res.data);
       cacheSessionUser(res.data);
       if (res.data.tema) applyTheme(res.data.tema);
-      return;
+    } else if (!cached) {
+      // Only set null if we have no cached user
+      setUser(null);
     }
-    const cached = readSessionUser();
-    if (cached && (res.meta?.offline || !navigator.onLine)) {
-      setUser(cached);
-      if (cached.tema) applyTheme(cached.tema);
-      return;
-    }
-    setUser(null);
   }, []);
 
   useEffect(() => {
