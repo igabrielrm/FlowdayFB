@@ -192,7 +192,7 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <mainClass>com.uce.servidorproyecto.ServidorproyectoApplication</mainClass>
+                    <mainClass>com.flowday.flowday.FlowdayApplication</mainClass>
                 </configuration>
             </plugin>
             <plugin>
