@@ -1,9 +1,9 @@
-package com.uce.servidorproyecto.security;
+package com.flowday.flowday.security;
 
-import com.uce.servidorproyecto.config.MobileAuthProperties;
-import com.uce.servidorproyecto.model.MobileRefreshToken;
-import com.uce.servidorproyecto.model.Usuario;
-import com.uce.servidorproyecto.repository.MobileRefreshTokenRepository;
+import com.flowday.flowday.config.MobileAuthProperties;
+import com.flowday.flowday.model.MobileRefreshToken;
+import com.flowday.flowday.model.Usuario;
+import com.flowday.flowday.repository.MobileRefreshTokenRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

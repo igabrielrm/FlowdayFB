@@ -1,12 +1,12 @@
-package com.uce.servidorproyecto;
+package com.flowday.flowday;
 
-import com.uce.servidorproyecto.model.Actividad;
-import com.uce.servidorproyecto.model.Usuario;
-import com.uce.servidorproyecto.repository.ActividadRepository;
-import com.uce.servidorproyecto.repository.UsuarioRepository;
-import com.uce.servidorproyecto.service.ActividadService;
-import com.uce.servidorproyecto.service.IAService;
-import com.uce.servidorproyecto.service.UsuarioService;
+import com.flowday.flowday.model.Actividad;
+import com.flowday.flowday.model.Usuario;
+import com.flowday.flowday.repository.ActividadRepository;
+import com.flowday.flowday.repository.UsuarioRepository;
+import com.flowday.flowday.service.ActividadService;
+import com.flowday.flowday.service.IAService;
+import com.flowday.flowday.service.UsuarioService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

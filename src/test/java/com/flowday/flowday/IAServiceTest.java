@@ -1,7 +1,7 @@
-package com.uce.servidorproyecto.service;
+package com.flowday.flowday.service;
 
-import com.uce.servidorproyecto.model.Actividad;
-import com.uce.servidorproyecto.model.Usuario;
+import com.flowday.flowday.model.Actividad;
+import com.flowday.flowday.model.Usuario;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

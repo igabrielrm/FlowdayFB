@@ -1,7 +1,7 @@
-package com.uce.servidorproyecto.security;
+package com.flowday.flowday.security;
 
-import com.uce.servidorproyecto.model.Usuario;
-import com.uce.servidorproyecto.repository.UsuarioRepository;
+import com.flowday.flowday.model.Usuario;
+import com.flowday.flowday.repository.UsuarioRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;

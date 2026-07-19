@@ -1,8 +1,8 @@
-package com.uce.servidorproyecto.security;
+package com.flowday.flowday.security;
 
-import com.uce.servidorproyecto.model.MobileOAuthCode;
-import com.uce.servidorproyecto.model.Usuario;
-import com.uce.servidorproyecto.repository.MobileOAuthCodeRepository;
+import com.flowday.flowday.model.MobileOAuthCode;
+import com.flowday.flowday.model.Usuario;
+import com.flowday.flowday.repository.MobileOAuthCodeRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;

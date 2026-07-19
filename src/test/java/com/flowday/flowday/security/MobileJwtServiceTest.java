@@ -1,7 +1,7 @@
-package com.uce.servidorproyecto.security;
+package com.flowday.flowday.security;
 
-import com.uce.servidorproyecto.config.MobileAuthProperties;
-import com.uce.servidorproyecto.model.Usuario;
+import com.flowday.flowday.config.MobileAuthProperties;
+import com.flowday.flowday.model.Usuario;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;

@@ -1,8 +1,8 @@
-package com.uce.servidorproyecto.controller;
+package com.flowday.flowday.controller;
 
-import com.uce.servidorproyecto.model.Usuario;
-import com.uce.servidorproyecto.security.SecurityUtils;
-import com.uce.servidorproyecto.service.UsuarioService;
+import com.flowday.flowday.model.Usuario;
+import com.flowday.flowday.security.SecurityUtils;
+import com.flowday.flowday.service.UsuarioService;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

@@ -1,14 +1,14 @@
-package com.uce.servidorproyecto.service;
+package com.flowday.flowday.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.uce.servidorproyecto.api.dto.AssistantHistoryMessage;
-import com.uce.servidorproyecto.api.dto.AssistantMessageRequest;
-import com.uce.servidorproyecto.api.dto.AssistantMessageResponse;
-import com.uce.servidorproyecto.dto.ConflictoEvento;
-import com.uce.servidorproyecto.model.Actividad;
-import com.uce.servidorproyecto.model.AssistantAction;
-import com.uce.servidorproyecto.model.Usuario;
-import com.uce.servidorproyecto.repository.AssistantActionRepository;
+import com.flowday.flowday.api.dto.AssistantHistoryMessage;
+import com.flowday.flowday.api.dto.AssistantMessageRequest;
+import com.flowday.flowday.api.dto.AssistantMessageResponse;
+import com.flowday.flowday.dto.ConflictoEvento;
+import com.flowday.flowday.model.Actividad;
+import com.flowday.flowday.model.AssistantAction;
+import com.flowday.flowday.model.Usuario;
+import com.flowday.flowday.repository.AssistantActionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

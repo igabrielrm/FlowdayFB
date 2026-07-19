@@ -1,4 +1,4 @@
-package com.uce.servidorproyecto;
+package com.flowday.flowday;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

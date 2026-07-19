@@ -1,4 +1,4 @@
-package com.uce.servidorproyecto.config;
+package com.flowday.flowday.config;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;

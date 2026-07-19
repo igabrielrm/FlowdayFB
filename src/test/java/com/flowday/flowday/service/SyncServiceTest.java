@@ -1,15 +1,15 @@
-package com.uce.servidorproyecto.service;
+package com.flowday.flowday.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.uce.servidorproyecto.api.dto.SyncOperationRequest;
-import com.uce.servidorproyecto.api.dto.SyncRequest;
-import com.uce.servidorproyecto.model.Actividad;
-import com.uce.servidorproyecto.model.Usuario;
-import com.uce.servidorproyecto.repository.ActividadRepository;
-import com.uce.servidorproyecto.repository.RegistroBienestarRepository;
-import com.uce.servidorproyecto.repository.SyncOperationRepository;
-import com.uce.servidorproyecto.repository.UsuarioRepository;
+import com.flowday.flowday.api.dto.SyncOperationRequest;
+import com.flowday.flowday.api.dto.SyncRequest;
+import com.flowday.flowday.model.Actividad;
+import com.flowday.flowday.model.Usuario;
+import com.flowday.flowday.repository.ActividadRepository;
+import com.flowday.flowday.repository.RegistroBienestarRepository;
+import com.flowday.flowday.repository.SyncOperationRepository;
+import com.flowday.flowday.repository.UsuarioRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
