@@ -26,6 +26,8 @@ import { OFFLINE_QUEUE_EVENT } from '../events';
 import { readApiGet } from '../offline/cache';
 import type { Note } from '../types/note';
 import { NOTE_COLORS } from '../types/note';
+import { FormControl, InputLabel, MenuItem, Select, Stack, TextField, Checkbox, FormControlLabel } from '@mui/material';
+import type { RecurrenceConfig, RecurrenceKind } from '../utils/recurrence';
 
 // ─── NoteCard ────────────────────────────────────────────────────────────────
 
@@ -139,6 +141,11 @@ function NoteEditorDialog({
   const [color, setColor] = useState(note?.color ?? '#ffffff');
   const [pinned, setPinned] = useState(note?.pinned ?? false);
   const [showPalette, setShowPalette] = useState(false);
+  const [recurrenceEnabled, setRecurrenceEnabled] = useState(Boolean(note?.recurrence?.enabled));
+  const [recurrenceKind, setRecurrenceKind] = useState<RecurrenceKind>(note?.recurrence?.kind ?? 'daily');
+  const [recurrenceInterval, setRecurrenceInterval] = useState(String(note?.recurrence?.interval ?? 1));
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState(note?.recurrence?.endDate ?? '');
+  const [recurrenceMaxOccurrences, setRecurrenceMaxOccurrences] = useState(String(note?.recurrence?.maxOccurrences ?? 3));
   const dirty = useRef(false);
 
   const colorDef = NOTE_COLORS.find((c) => c.value === color);
@@ -150,6 +157,11 @@ function NoteEditorDialog({
     setContenido(note?.contenido ?? '');
     setColor(note?.color ?? '#ffffff');
     setPinned(note?.pinned ?? false);
+    setRecurrenceEnabled(Boolean(note?.recurrence?.enabled));
+    setRecurrenceKind(note?.recurrence?.kind ?? 'daily');
+    setRecurrenceInterval(String(note?.recurrence?.interval ?? 1));
+    setRecurrenceEndDate(note?.recurrence?.endDate ?? '');
+    setRecurrenceMaxOccurrences(String(note?.recurrence?.maxOccurrences ?? 3));
   }, [note?.id]);
 
   const handleChange = (field: string, value: unknown) => {
@@ -162,7 +174,16 @@ function NoteEditorDialog({
 
   const handleClose = () => {
     if (dirty.current) {
-      onSave({ titulo, contenido, color, pinned });
+      const recurrence = recurrenceEnabled
+        ? {
+            enabled: true,
+            kind: recurrenceKind,
+            interval: Number(recurrenceInterval) || 1,
+            endDate: recurrenceEndDate || undefined,
+            maxOccurrences: Number(recurrenceMaxOccurrences) || 3,
+          } satisfies RecurrenceConfig
+        : undefined;
+      onSave({ titulo, contenido, color, pinned, recurrence });
     }
     onClose();
   };
@@ -219,6 +240,56 @@ function NoteEditorDialog({
           inputProps={{ 'aria-label': 'Contenido de la nota' }}
           sx={{ px: 2, pt: 1, pb: 2, fontSize: '0.9rem', lineHeight: 1.7 }}
         />
+
+        <Box sx={{ px: 2, pb: 1.5 }}>
+          <FormControlLabel
+            control={<Checkbox checked={recurrenceEnabled} onChange={(_, checked) => setRecurrenceEnabled(checked)} />}
+            label="Repetir esta nota"
+          />
+          {recurrenceEnabled && (
+            <Stack spacing={1.5} sx={{ mt: 1 }}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Frecuencia</InputLabel>
+                  <Select label="Frecuencia" value={recurrenceKind} onChange={(e) => setRecurrenceKind(e.target.value as RecurrenceKind)}>
+                    <MenuItem value="daily">Diaria</MenuItem>
+                    <MenuItem value="weekly">Semanal</MenuItem>
+                    <MenuItem value="monthly">Mensual</MenuItem>
+                  </Select>
+                </FormControl>
+                <TextField
+                  label="Cada"
+                  type="number"
+                  size="small"
+                  value={recurrenceInterval}
+                  onChange={(e) => setRecurrenceInterval(e.target.value)}
+                  inputProps={{ min: 1, max: 12 }}
+                  fullWidth
+                />
+              </Stack>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+                <TextField
+                  label="Hasta"
+                  type="date"
+                  size="small"
+                  value={recurrenceEndDate}
+                  onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                  fullWidth
+                />
+                <TextField
+                  label="Máx. repeticiones"
+                  type="number"
+                  size="small"
+                  value={recurrenceMaxOccurrences}
+                  onChange={(e) => setRecurrenceMaxOccurrences(e.target.value)}
+                  inputProps={{ min: 1, max: 24 }}
+                  fullWidth
+                />
+              </Stack>
+            </Stack>
+          )}
+        </Box>
 
         {/* Toolbar */}
         <Box

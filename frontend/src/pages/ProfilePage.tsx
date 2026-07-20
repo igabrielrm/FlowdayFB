@@ -24,6 +24,7 @@ import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { Link as RouterLink } from 'react-router-dom';
 import PageHeader from '../components/mui/PageHeader';
 import PageStack from '../components/mui/PageStack';
 import type { Profile } from '../types/profile';
@@ -37,10 +38,11 @@ import {
   type NotificationPreferences,
 } from '../notifications/preferences';
 import { FormControlLabel, Switch } from '@mui/material';
+import { useOfflineSync } from '../offline/useOfflineSync';
 
 export default function ProfilePage() {
   const theme = useTheme();
-  const { refresh } = useAuth();
+  const { user, refresh } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,6 +63,7 @@ export default function ProfilePage() {
   const [reloadDialogOpen, setReloadDialogOpen] = useState(false);
   const [pendingTheme, setPendingTheme] = useState<'light' | 'dark'>('dark');
   const [prefs, setPrefs] = useState<NotificationPreferences>(loadNotificationPreferences());
+  const { pending, syncing, syncNow, lastError } = useOfflineSync();
 
   useEffect(() => {
     api.profile.get().then((res) => {
@@ -73,6 +76,10 @@ export default function ProfilePage() {
       setLoading(false);
     });
   }, []);
+
+  useEffect(() => {
+    if (lastError) setError(lastError);
+  }, [lastError]);
 
   function fillForm(data: Profile) {
     setProfile(data);
@@ -159,6 +166,17 @@ export default function ProfilePage() {
     if (fileRef.current) fileRef.current.value = '';
   }
 
+  async function onSyncNow() {
+    setError(null);
+    setMessage(null);
+    if (pending === 0) {
+      setMessage('No hay cambios pendientes por sincronizar.');
+      return;
+    }
+    await syncNow();
+    setMessage('Sincronización iniciada. Espera a que el estado se actualice automáticamente.');
+  }
+
   if (loading) {
     return (
       <Stack alignItems="center" py={6}>
@@ -168,7 +186,14 @@ export default function ProfilePage() {
   }
 
   if (!profile) {
-    return <Alert severity="error">{error || 'Perfil no disponible'}</Alert>;
+    return (
+      <PageStack>
+        <PageHeader title="Mi perfil" subtitle="Administra tu cuenta y preferencias" />
+        <Alert severity="info">
+          Aún no has iniciado sesión. <Button component={RouterLink} to="/login" sx={{ ml: 1 }} variant="outlined">Iniciar sesión</Button>
+        </Alert>
+      </PageStack>
+    );
   }
 
   const avatarUrl = assetUrl(profile.foto) || null;
@@ -203,6 +228,11 @@ export default function ProfilePage() {
               <Typography variant="body2" color="text.secondary">
                 {profile.correo}
               </Typography>
+              {!user && (
+                <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 0.5 }}>
+                  Sesión no activa. Inicia sesión para sincronizar y guardar tus cambios en la nube.
+                </Typography>
+              )}
               <Button size="small" disabled={photoBusy} onClick={() => fileRef.current?.click()} sx={{ mt: 1 }}>
                 {photoBusy ? 'Subiendo…' : 'Cambiar foto'}
               </Button>
@@ -272,6 +302,17 @@ export default function ProfilePage() {
 
       <Card>
         <CardContent>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} sx={{ mb: 2 }}>
+            <Box>
+              <Typography variant="h6">Sincronización con la nube</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {pending > 0 ? `${pending} cambio${pending === 1 ? '' : 's'} pendiente${pending === 1 ? '' : 's'}` : 'Tus cambios ya están al día.'}
+              </Typography>
+            </Box>
+            <Button variant="outlined" onClick={() => void onSyncNow()} disabled={syncing || pending === 0}>
+              {syncing ? 'Sincronizando…' : 'Sincronizar ahora'}
+            </Button>
+          </Stack>
           <Typography variant="h6" gutterBottom>
             Notificaciones móviles
           </Typography>
@@ -299,15 +340,26 @@ export default function ProfilePage() {
                     />
                   </Stack>
                   {(option.key === 'activities' || option.key === 'classes') && (
-                    <TextField
-                      label="Minutos de anticipación"
-                      type="number"
-                      size="small"
-                      value={current.leadMinutes ?? (option.key === 'activities' ? 60 : 15)}
-                      onChange={(e) => updatePref(option.key, { leadMinutes: Number(e.target.value) || 0 })}
-                      sx={{ mt: 1.5, maxWidth: 220 }}
-                      inputProps={{ min: 0, max: 1440 }}
-                    />
+                    <FormControl size="small" sx={{ mt: 1.5, maxWidth: 220 }}>
+                      <InputLabel>Anticipación</InputLabel>
+                      <Select
+                        label="Anticipación"
+                        value={String(current.leadMinutes ?? (option.key === 'activities' ? 60 : 15))}
+                        onChange={(e) => updatePref(option.key, { leadMinutes: Number(e.target.value) || 0 })}
+                      >
+                        {[5, 15, 30, 60, 120, 1440].map((value) => (
+                          <MenuItem key={value} value={value}>
+                            {value < 60
+                              ? `${value} min`
+                              : value === 60
+                                ? '1 hora'
+                                : value === 120
+                                  ? '2 horas'
+                                  : '1 día'}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
                   )}
                 </Box>
               );

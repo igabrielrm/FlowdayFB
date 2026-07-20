@@ -26,7 +26,7 @@ import NativeAppBridge from './components/NativeAppBridge';
 import NotesPage from './pages/NotesPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { loading } = useAuth();
   if (loading) {
     return (
       <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -34,7 +34,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
       </Box>
     );
   }
-  if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 

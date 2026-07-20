@@ -30,6 +30,7 @@ import {
 } from '../types/activity';
 import ColorSwatchPicker from './ColorSwatchPicker';
 import { localDateIso } from '../utils/localDate';
+import type { RecurrenceConfig, RecurrenceKind } from '../utils/recurrence';
 
 export type ActivityFormValues = {
   titulo: string;
@@ -43,6 +44,7 @@ export type ActivityFormValues = {
   estado: string;
   companerosIds: number[];
   color?: string;
+  recurrence?: RecurrenceConfig;
 };
 
 type Props = {
@@ -85,6 +87,11 @@ export default function ActivityForm({
   const [estado, setEstado] = useState(initial?.estado ?? 'PENDIENTE');
   const [companerosIds, setCompanerosIds] = useState<number[]>(initial?.companerosIds ?? []);
   const [color, setColor] = useState(initial?.color ?? '#3b82f6');
+  const [recurrenceEnabled, setRecurrenceEnabled] = useState(Boolean(initial?.recurrence?.enabled));
+  const [recurrenceKind, setRecurrenceKind] = useState<RecurrenceKind>(initial?.recurrence?.kind ?? 'daily');
+  const [recurrenceInterval, setRecurrenceInterval] = useState(String(initial?.recurrence?.interval ?? 1));
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState(initial?.recurrence?.endDate ?? '');
+  const [recurrenceMaxOccurrences, setRecurrenceMaxOccurrences] = useState(String(initial?.recurrence?.maxOccurrences ?? 3));
   const [connections, setConnections] = useState<UsuarioDto[]>([]);
   const [materiasHorario, setMateriasHorario] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -131,6 +138,16 @@ export default function ActivityForm({
     setSubmitting(true);
     setError(null);
     const duracion = parsePositiveInt(duracionMinutos, 60);
+    const recurrence = recurrenceEnabled
+      ? {
+          enabled: true,
+          kind: recurrenceKind,
+          interval: parsePositiveInt(recurrenceInterval, 1),
+          endDate: recurrenceEndDate || undefined,
+          maxOccurrences: parsePositiveInt(recurrenceMaxOccurrences, 3),
+        } satisfies RecurrenceConfig
+      : undefined;
+
     const err = await onSubmit({
       titulo,
       tipo,
@@ -143,6 +160,7 @@ export default function ActivityForm({
       companerosIds: isGroupActivityType(tipo) && companerosIds.length > 0 ? companerosIds : undefined,
       color,
       estado,
+      recurrence,
     });
     if (err) setError(err);
     setSubmitting(false);
@@ -274,6 +292,56 @@ export default function ActivityForm({
           onChange={(e) => setDescripcion(e.target.value)}
         />
 
+        <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+          <FormControlLabel
+            control={<Checkbox checked={recurrenceEnabled} onChange={(_, checked) => setRecurrenceEnabled(checked)} />}
+            label="Repetir esta actividad"
+          />
+          {recurrenceEnabled && (
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Frecuencia</InputLabel>
+                  <Select label="Frecuencia" value={recurrenceKind} onChange={(e) => setRecurrenceKind(e.target.value as RecurrenceKind)}>
+                    <MenuItem value="daily">Diaria</MenuItem>
+                    <MenuItem value="weekly">Semanal</MenuItem>
+                    <MenuItem value="monthly">Mensual</MenuItem>
+                  </Select>
+                </FormControl>
+                <TextField
+                  label="Cada"
+                  type="number"
+                  size="small"
+                  value={recurrenceInterval}
+                  onChange={(e) => setRecurrenceInterval(e.target.value)}
+                  inputProps={{ min: 1, max: 12 }}
+                  fullWidth
+                />
+              </Stack>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                <TextField
+                  label="Hasta"
+                  type="date"
+                  size="small"
+                  value={recurrenceEndDate}
+                  onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                  fullWidth
+                />
+                <TextField
+                  label="Máx. repeticiones"
+                  type="number"
+                  size="small"
+                  value={recurrenceMaxOccurrences}
+                  onChange={(e) => setRecurrenceMaxOccurrences(e.target.value)}
+                  inputProps={{ min: 1, max: 24 }}
+                  fullWidth
+                />
+              </Stack>
+            </Stack>
+          )}
+        </Box>
+
         {isGroupActivityType(tipo) && (
           <FormControl component="fieldset">
             <FormLabel component="legend">Compañeros conectados</FormLabel>
@@ -337,5 +405,6 @@ export function detailToFormValues(detail: ActividadDetail): ActivityFormValues 
     estado: detail.estado,
     companerosIds: detail.companerosIds ?? [],
     color: detail.color ?? '#3b82f6',
+    recurrence: detail.recurrence,
   };
 }

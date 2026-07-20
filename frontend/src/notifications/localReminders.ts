@@ -5,6 +5,7 @@ import { isNative } from '../platform';
 import { localDateIso, parseLocalDate, shiftLocalDateIso } from '../utils/localDate';
 import { loadNotificationPreferences, notificationCategoryForType } from './preferences';
 import type { NotificationPushPayload } from './types';
+import { buildOccurrences } from '../utils/recurrence';
 
 const CHANNEL_ID = 'flowday-reminders';
 const PERMISSION_KEY = 'flowday-notif-permission';
@@ -150,37 +151,45 @@ export async function syncLocalReminders(input: {
 
   for (const activity of input.activities) {
     if (!prefs.activities.enabled || activity.estado === 'COMPLETADA') continue;
-    const start = activityStart(activity);
-    if (!start) continue;
+    const baseDate = activity.fechaInicio;
+    const recurrence = activity.recurrence;
+    const occurrenceDates = recurrence?.enabled && baseDate
+      ? buildOccurrences(recurrence.kind, recurrence.interval, baseDate, recurrence.maxOccurrences ?? 3, recurrence.endDate)
+      : [baseDate].filter(Boolean) as string[];
 
-    const nearAt = new Date(start.getTime() - (prefs.activities.leadMinutes ?? 60) * 60_000);
-    if (nearAt.getTime() > now) {
-      notifications.push({
-        id: hashId(`activity-near:${activity.id}:${activity.fechaInicio}`),
-        title: 'Actividad próxima',
-        body: `${activity.titulo} ${activity.horaInicio ? `a las ${activity.horaInicio}` : 'hoy'}`,
-        schedule: { at: nearAt, allowWhileIdle: true },
-        channelId: CHANNEL_ID,
-        extra: { route: '/activities' },
-      });
-    }
+    for (const occurrenceDate of occurrenceDates) {
+      const start = activityStart({ ...activity, fechaInicio: occurrenceDate });
+      if (!start) continue;
 
-    const high =
-      activity.prioridad === 'ALTA'
-      || activity.tipo === 'EXAMEN'
-      || activity.tipo === 'DEBER';
-    if (high && activity.fechaInicio) {
-      const dayBefore = shiftLocalDateIso(activity.fechaInicio, -1);
-      const remindAt = atLocal(dayBefore, 8, 0);
-      if (remindAt.getTime() > now) {
+      const nearAt = new Date(start.getTime() - (prefs.activities.leadMinutes ?? 60) * 60_000);
+      if (nearAt.getTime() > now) {
         notifications.push({
-          id: hashId(`activity-priority:${activity.id}:${activity.fechaInicio}`),
-          title: 'Prioridad alta mañana',
-          body: `Recuerda: ${activity.titulo}`,
-          schedule: { at: remindAt, allowWhileIdle: true },
+          id: hashId(`activity-near:${activity.id}:${occurrenceDate}`),
+          title: 'Actividad próxima',
+          body: `${activity.titulo} ${activity.horaInicio ? `a las ${activity.horaInicio}` : 'hoy'}`,
+          schedule: { at: nearAt, allowWhileIdle: true },
           channelId: CHANNEL_ID,
           extra: { route: '/activities' },
         });
+      }
+
+      const high =
+        activity.prioridad === 'ALTA'
+        || activity.tipo === 'EXAMEN'
+        || activity.tipo === 'DEBER';
+      if (high && occurrenceDate) {
+        const dayBefore = shiftLocalDateIso(occurrenceDate, -1);
+        const remindAt = atLocal(dayBefore, 8, 0);
+        if (remindAt.getTime() > now) {
+          notifications.push({
+            id: hashId(`activity-priority:${activity.id}:${occurrenceDate}`),
+            title: 'Prioridad alta mañana',
+            body: `Recuerda: ${activity.titulo}`,
+            schedule: { at: remindAt, allowWhileIdle: true },
+            channelId: CHANNEL_ID,
+            extra: { route: '/activities' },
+          });
+        }
       }
     }
   }

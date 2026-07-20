@@ -1,3 +1,5 @@
+import type { RecurrenceConfig } from '../utils/recurrence';
+
 export type ActividadListItem = {
   id: number | string;
   version?: number;
@@ -12,6 +14,7 @@ export type ActividadListItem = {
   color?: string | null;
   esPropietario: boolean;
   esCompartida: boolean;
+  recurrence?: RecurrenceConfig;
   updatedAt?: string;
 };
 
@@ -32,6 +35,7 @@ export type ActividadDetail = {
   esPropietario: boolean;
   puedeEditar: boolean;
   companerosIds: number[];
+  recurrence?: RecurrenceConfig;
   updatedAt?: string;
 };
 
@@ -76,6 +80,7 @@ export type CreateActividadPayload = {
   descripcion?: string;
   companerosIds?: number[];
   color?: string;
+  recurrence?: RecurrenceConfig;
 };
 
 export type UpdateActividadPayload = CreateActividadPayload & {

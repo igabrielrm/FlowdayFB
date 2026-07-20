@@ -1,3 +1,5 @@
+import type { RecurrenceConfig } from '../utils/recurrence';
+
 export type Note = {
   id: string;
   version?: number;
@@ -5,6 +7,7 @@ export type Note = {
   contenido: string;
   pinned: boolean;
   color: string;
+  recurrence?: RecurrenceConfig;
   createdAt?: string;
   updatedAt?: string;
 };

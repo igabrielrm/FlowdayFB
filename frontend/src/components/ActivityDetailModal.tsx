@@ -17,9 +17,11 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { api } from '../api/client';
+import { readApiGet } from '../offline/cache';
 import { modalSlotProps } from '../theme/modal';
-import type { ActividadDetail } from '../types/activity';
+import type { ActividadDetail, ActividadListItem } from '../types/activity';
 import { estadoLabel, formatDate, tipoLabel } from '../types/activity';
+import { resolveActivityDetailState } from './activityDetailState';
 
 type Props = {
   activityId: number | null;
@@ -34,6 +36,31 @@ function estadoChipColor(estado: string): 'default' | 'success' | 'warning' | 'i
   return 'default';
 }
 
+function readCachedActivityDetail(id: number | null): ActividadDetail | null {
+  if (!id) return null;
+  const direct = readApiGet<ActividadDetail>(`/api/v1/activities/${id}`);
+  if (direct) return direct;
+
+  const listItem = readApiGet<ActividadListItem[]>('/api/v1/activities')?.find((activity) => String(activity.id) === String(id));
+  if (!listItem) return null;
+
+  return {
+    id: listItem.id,
+    titulo: listItem.titulo,
+    tipo: listItem.tipo,
+    estado: listItem.estado,
+    fechaInicio: listItem.fechaInicio,
+    horaInicio: listItem.horaInicio,
+    duracionMinutos: listItem.duracionMinutos,
+    materia: listItem.materia,
+    prioridad: listItem.prioridad,
+    color: listItem.color,
+    esPropietario: listItem.esPropietario,
+    puedeEditar: listItem.esPropietario,
+    companerosIds: [],
+  };
+}
+
 export default function ActivityDetailModal({ activityId, onClose, onChanged }: Props) {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -45,19 +72,26 @@ export default function ActivityDetailModal({ activityId, onClose, onChanged }: 
   useEffect(() => {
     if (!activityId) {
       setDetail(null);
+      setLoading(false);
+      setError(null);
       return;
     }
-    setLoading(true);
-    setError(null);
-    api.activities.get(activityId).then((res) => {
-      if (!res.ok || !res.data) {
-        setError(res.error || 'No se pudo cargar la actividad');
-        setDetail(null);
-        setLoading(false);
-        return;
-      }
-      setDetail(res.data);
+
+    const cachedDetail = readCachedActivityDetail(activityId);
+    if (cachedDetail) {
+      setDetail(cachedDetail);
       setLoading(false);
+    } else {
+      setDetail(null);
+      setLoading(true);
+    }
+    setError(null);
+
+    void api.activities.get(activityId).then((res) => {
+      const nextState = resolveActivityDetailState(res, cachedDetail);
+      setDetail(nextState.detail);
+      setError(nextState.error);
+      setLoading(nextState.loading);
     });
   }, [activityId]);
 
