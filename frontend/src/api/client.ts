@@ -94,11 +94,13 @@ import {
   refreshNativeAccessToken,
   storeNativeTokens,
 } from '../auth/nativeAuth';
+import { withTimeout } from './timeout';
 
 export type { NotificationItem };
 
 const OFFLINE_MSG =
   'Sin conexión. Conéctate para esta acción o usa los datos guardados de tu última visita.';
+const NETWORK_TIMEOUT_MS = 2500;
 
 const QUEUED_MSG = 'Guardado como borrador. Se sincronizará al reconectar.';
 
@@ -107,11 +109,14 @@ function isGetMethod(init?: RequestInit) {
 }
 
 async function performFetch<T>(path: string, init?: RequestInit): Promise<ApiResponse<T>> {
-  const res = await nativeAuthorizedFetch(path, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-    ...init,
-  });
+  const res = await withTimeout(
+    nativeAuthorizedFetch(path, {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+      ...init,
+    }),
+    NETWORK_TIMEOUT_MS,
+  );
   if (res.status === 401) {
     return { ok: false, data: null, error: 'No autenticado' };
   }
@@ -302,11 +307,14 @@ async function loginRequest(correo: string, contrasena: string): Promise<ApiResp
   }
 
   try {
-    const response = await fetch(apiUrl('/api/v1/mobile-auth/login'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: correo, password: contrasena }),
-    });
+    const response = await withTimeout(
+      fetch(apiUrl('/api/v1/mobile-auth/login'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: correo, password: contrasena }),
+      }),
+      NETWORK_TIMEOUT_MS,
+    );
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
       return {
@@ -351,7 +359,7 @@ async function mobileCompatibilityRequest(): Promise<ApiResponse<{ ready: boolea
   if (!isNative) return { ok: true, data: { ready: true }, error: null };
   if (!navigator.onLine) return { ok: false, data: null, error: 'Sin conexión a internet' };
   try {
-    const response = await fetch(apiUrl('/api/v1/mobile-auth/oauth-contract'));
+    const response = await withTimeout(fetch(apiUrl('/api/v1/mobile-auth/oauth-contract')), NETWORK_TIMEOUT_MS);
     if (!response.ok || !(response.headers.get('content-type') || '').includes('application/json')) {
       return {
         ok: false,

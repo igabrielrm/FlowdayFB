@@ -30,6 +30,13 @@ import type { Profile } from '../types/profile';
 import { assetUrl } from '../platform';
 import { GENERO_OPTIONS, applyTheme, profileInitials } from '../types/profile';
 import { glassButton } from '../theme/glass';
+import {
+  loadNotificationPreferences,
+  NOTIFICATION_PREFERENCE_OPTIONS,
+  saveNotificationPreferences,
+  type NotificationPreferences,
+} from '../notifications/preferences';
+import { FormControlLabel, Switch } from '@mui/material';
 
 export default function ProfilePage() {
   const theme = useTheme();
@@ -53,6 +60,7 @@ export default function ProfilePage() {
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [reloadDialogOpen, setReloadDialogOpen] = useState(false);
   const [pendingTheme, setPendingTheme] = useState<'light' | 'dark'>('dark');
+  const [prefs, setPrefs] = useState<NotificationPreferences>(loadNotificationPreferences());
 
   useEffect(() => {
     api.profile.get().then((res) => {
@@ -72,6 +80,14 @@ export default function ProfilePage() {
     setTelefono(data.telefono || '');
     setFechaNacimiento(data.fechaNacimiento || '');
     setGenero(data.genero || GENERO_OPTIONS[0]);
+  }
+
+  function updatePref(key: keyof NotificationPreferences, patch: Partial<(typeof prefs)[typeof key]>) {
+    setPrefs((current) => {
+      const next = { ...current, [key]: { ...current[key], ...patch } };
+      saveNotificationPreferences(next);
+      return next;
+    });
   }
 
   async function onSaveProfile(e: FormEvent) {
@@ -250,6 +266,52 @@ export default function ProfilePage() {
             <Button type="submit" variant="contained" disabled={saving} sx={{ alignSelf: 'flex-start' }}>
               {saving ? 'Guardando…' : 'Guardar cambios'}
             </Button>
+          </Stack>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            Notificaciones móviles
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Controla qué avisos recibe la app en tu dispositivo y con cuánta anticipación.
+          </Typography>
+          <Stack spacing={2}>
+            {NOTIFICATION_PREFERENCE_OPTIONS.map((option) => {
+              const current = prefs[option.key];
+              return (
+                <Box key={option.key} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }}>
+                    <Box>
+                      <Typography variant="subtitle2">{option.label}</Typography>
+                      <Typography variant="body2" color="text.secondary">{option.description}</Typography>
+                    </Box>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={current.enabled}
+                          onChange={(_, checked) => updatePref(option.key, { enabled: checked })}
+                        />
+                      }
+                      label={current.enabled ? 'Activadas' : 'Desactivadas'}
+                    />
+                  </Stack>
+                  {(option.key === 'activities' || option.key === 'classes') && (
+                    <TextField
+                      label="Minutos de anticipación"
+                      type="number"
+                      size="small"
+                      value={current.leadMinutes ?? (option.key === 'activities' ? 60 : 15)}
+                      onChange={(e) => updatePref(option.key, { leadMinutes: Number(e.target.value) || 0 })}
+                      sx={{ mt: 1.5, maxWidth: 220 }}
+                      inputProps={{ min: 0, max: 1440 }}
+                    />
+                  )}
+                </Box>
+              );
+            })}
           </Stack>
         </CardContent>
       </Card>

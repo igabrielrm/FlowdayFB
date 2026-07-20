@@ -1,8 +1,10 @@
 import { SecureStorage } from '@aparajita/capacitor-secure-storage';
 import { apiUrl, isNative } from '../platform';
+import { withTimeout } from '../api/timeout';
 
 const REFRESH_TOKEN_KEY = 'flowday_refresh_token';
 const OAUTH_VERIFIER_KEY = 'flowday_oauth_verifier';
+const NETWORK_TIMEOUT_MS = 2500;
 
 let accessToken: string | null = null;
 let refreshInFlight: Promise<string | null> | null = null;
@@ -69,11 +71,14 @@ export async function refreshNativeAccessToken(): Promise<string | null> {
     if (!refreshToken) return null;
 
     try {
-      const response = await fetch(apiUrl('/api/v1/mobile-auth/refresh'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
-      });
+      const response = await withTimeout(
+        fetch(apiUrl('/api/v1/mobile-auth/refresh'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        }),
+        NETWORK_TIMEOUT_MS,
+      );
       if (!response.ok) {
         await clearNativeTokens();
         return null;
@@ -102,11 +107,14 @@ export async function exchangeNativeOAuthCode(code: string) {
   try {
     const storedVerifier = await SecureStorage.get(OAUTH_VERIFIER_KEY);
     if (typeof storedVerifier !== 'string') return false;
-    const response = await fetch(apiUrl('/api/v1/mobile-auth/oauth/exchange'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, codeVerifier: storedVerifier }),
-    });
+    const response = await withTimeout(
+      fetch(apiUrl('/api/v1/mobile-auth/oauth/exchange'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, codeVerifier: storedVerifier }),
+      }),
+      NETWORK_TIMEOUT_MS,
+    );
     if (!response.ok) return false;
     await storeNativeTokens((await response.json()) as TokenPayload);
     await SecureStorage.remove(OAUTH_VERIFIER_KEY);
@@ -141,15 +149,18 @@ export async function nativeAuthorizedFetch(path: string, init: RequestInit = {}
     ...(init.headers || {}),
     ...(await nativeAuthHeaders()),
   };
-  let response = await fetch(apiUrl(path), { ...init, headers });
+  let response = await withTimeout(fetch(apiUrl(path), { ...init, headers }), NETWORK_TIMEOUT_MS);
 
   if (isNative && response.status === 401) {
     const renewed = await refreshNativeAccessToken();
     if (renewed) {
-      response = await fetch(apiUrl(path), {
-        ...init,
-        headers: { ...(init.headers || {}), Authorization: `Bearer ${renewed}` },
-      });
+      response = await withTimeout(
+        fetch(apiUrl(path), {
+          ...init,
+          headers: { ...(init.headers || {}), Authorization: `Bearer ${renewed}` },
+        }),
+        NETWORK_TIMEOUT_MS,
+      );
     }
   }
   return response;

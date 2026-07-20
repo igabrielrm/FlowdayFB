@@ -3,6 +3,8 @@ import type { ActividadListItem } from '../types/activity';
 import type { ScheduleBlock } from '../types/schedule';
 import { isNative } from '../platform';
 import { localDateIso, parseLocalDate, shiftLocalDateIso } from '../utils/localDate';
+import { loadNotificationPreferences, notificationCategoryForType } from './preferences';
+import type { NotificationPushPayload } from './types';
 
 const CHANNEL_ID = 'flowday-reminders';
 const PERMISSION_KEY = 'flowday-notif-permission';
@@ -77,6 +79,32 @@ async function ensureChannel() {
   }).catch(() => undefined);
 }
 
+export async function maybeScheduleIncomingNotification(payload: NotificationPushPayload) {
+  if (!isNative) return;
+  const prefs = loadNotificationPreferences();
+  const category = notificationCategoryForType(payload.tipo);
+  if (!category || !prefs[category]?.enabled) return;
+
+  const allowed = await ensureLocalNotificationPermission();
+  if (!allowed) return;
+
+  await ensureChannel();
+
+  const notificationId = payload.id ? hashId(`push:${payload.id}`) : Date.now();
+  await LocalNotifications.schedule({
+    notifications: [
+      {
+        id: notificationId,
+        title: payload.titulo || 'Nueva notificación',
+        body: payload.mensaje || 'Tienes una nueva alerta en Flowday',
+        schedule: { at: new Date(Date.now() + 1000), allowWhileIdle: true },
+        channelId: CHANNEL_ID,
+        extra: payload.enlace ? { route: payload.enlace } : undefined,
+      },
+    ],
+  }).catch(() => undefined);
+}
+
 export async function syncLocalReminders(input: {
   activities: ActividadListItem[];
   schedule: ScheduleBlock[];
@@ -84,6 +112,7 @@ export async function syncLocalReminders(input: {
   if (!isNative) return;
   const allowed = await ensureLocalNotificationPermission();
   if (!allowed) return;
+  const prefs = loadNotificationPreferences();
 
   await ensureChannel();
 
@@ -104,9 +133,10 @@ export async function syncLocalReminders(input: {
   }[] = [];
 
   for (const block of input.schedule) {
+    if (!prefs.classes.enabled) continue;
     const start = nextOccurrenceOfBlock(block);
     if (!start) continue;
-    const remindAt = new Date(start.getTime() - 15 * 60_000);
+    const remindAt = new Date(start.getTime() - (prefs.classes.leadMinutes ?? 15) * 60_000);
     if (remindAt.getTime() <= now) continue;
     notifications.push({
       id: hashId(`schedule:${block.id}:${localDateIso(start)}`),
@@ -119,11 +149,11 @@ export async function syncLocalReminders(input: {
   }
 
   for (const activity of input.activities) {
-    if (activity.estado === 'COMPLETADA') continue;
+    if (!prefs.activities.enabled || activity.estado === 'COMPLETADA') continue;
     const start = activityStart(activity);
     if (!start) continue;
 
-    const nearAt = new Date(start.getTime() - 60 * 60_000);
+    const nearAt = new Date(start.getTime() - (prefs.activities.leadMinutes ?? 60) * 60_000);
     if (nearAt.getTime() > now) {
       notifications.push({
         id: hashId(`activity-near:${activity.id}:${activity.fechaInicio}`),

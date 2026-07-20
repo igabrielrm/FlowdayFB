@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useNotificationSocket } from './useNotificationSocket';
 import type { NotificationItem, NotificationPushPayload } from './types';
 import { resolveNotificationTarget } from './types';
+import { maybeScheduleIncomingNotification } from './localReminders';
 
 type Toast = {
   id: number;
@@ -52,6 +53,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       ...prev.slice(-2),
       { id: toastId, titulo: payload.titulo, enlace: payload.enlace, tipo: payload.tipo },
     ]);
+    void maybeScheduleIncomingNotification(payload);
     window.setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== toastId));
     }, 4500);

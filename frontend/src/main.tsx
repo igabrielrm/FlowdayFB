@@ -49,4 +49,5 @@ function renderApp() {
   );
 }
 
-hydrateOfflineState().finally(renderApp);
+void hydrateOfflineState();
+renderApp();
