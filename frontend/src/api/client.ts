@@ -1,7 +1,7 @@
-export type UsuarioDto = {
-  id: number;
+﻿export type UsuarioDto = {
+  id: number | string;
   nombre: string;
-  correo: string;
+  correo: string | null;
   rol: string;
   tema?: string;
   foto?: string;
@@ -14,24 +14,6 @@ export type ApiResponse<T> = {
   meta?: Record<string, unknown>;
 };
 
-export type AssistantProposal = {
-  id: string;
-  type: 'CREATE_ACTIVITY' | 'RESCHEDULE_ACTIVITY';
-  summary?: string;
-  payload?: Record<string, unknown>;
-  conflicts?: string[];
-  expiresAt?: string;
-  activityId?: number | null;
-  status?: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'EXPIRED';
-};
-
-export type AssistantMessageResponse = {
-  respuesta: string;
-  proposal?: AssistantProposal | null;
-  ia?: boolean;
-  fallback?: boolean;
-};
-
 import type { ActividadDetail, ActividadListItem, CreateActividadPayload, PriorityAlert, ReschedulableItem, UpdateActividadPayload } from '../types/activity';
 import type { NotificationItem } from '../notifications/types';
 import type { Profile, UpdateProfilePayload } from '../types/profile';
@@ -39,13 +21,7 @@ import type { CommunityStats, CommunityUser } from '../types/community';
 import type { CreateScheduleBlockPayload, ScheduleAlert, ScheduleBlock } from '../types/schedule';
 import type { ChatMessage, Conversation } from '../types/chat';
 import type { Note } from '../types/note';
-import type {
-  AdminAnnouncement,
-  AdminStats,
-  AdminTopUser,
-  AdminUser,
-  AdminWellbeing,
-} from '../types/admin';
+import type { AdminAnnouncement, AdminStats, AdminTopUser, AdminUser, AdminWellbeing } from '../types/admin';
 import type { StressReport, WellbeingStats } from '../types/wellbeing';
 import {
   cacheApiGet,
@@ -53,959 +29,449 @@ import {
   isBrowserOffline,
   readApiGet,
 } from '../offline/cache';
-import { notifyOfflineQueueChanged } from '../events';
-import {
-  applyActivityCreate,
-  applyActivityDelete,
-  applyActivityReschedule,
-  applyActivityStatus,
-  applyActivityUpdate,
-  applyScheduleCreate,
-  applyScheduleDelete,
-  applyScheduleUpdate,
-  applyNoteCreate,
-  applyNoteUpdate,
-  applyNoteDelete,
-  buildOptimisticActivity,
-  buildOptimisticNote,
-  buildOptimisticScheduleBlock,
-} from '../offline/optimistic';
-import {
-  allocateTempId,
-  enqueue,
-  type OfflineMutationKind,
-} from '../offline/queue';
-import {
-  applyChatDelete,
-  applyChatRead,
-  applyChatSend,
-  applyCommunityConnect,
-  applyCommunityDecision,
-  applyNotificationDelete,
-  applyNotificationRead,
-  applyProfileUpdate,
-  applyWellbeingRecord,
-} from '../offline/domainOptimistic';
-import { apiUrl, isNative } from '../platform';
-import {
-  clearNativeTokens,
-  getNativeRefreshToken,
-  nativeAuthorizedFetch,
-  refreshNativeAccessToken,
-  storeNativeTokens,
-} from '../auth/nativeAuth';
-import { withTimeout } from './timeout';
+import * as firebaseData from '../firebase/data';
+import { firebaseClient, formatUser } from '../firebase/client';
 
-export type { NotificationItem };
+const OFFLINE_MSG = 'Sin conexión. Usa tus datos locales o conecta tu cuenta para respaldo en la nube.';
 
-const OFFLINE_MSG =
-  'Sin conexión. Conéctate para esta acción o usa los datos guardados de tu última visita.';
-const NETWORK_TIMEOUT_MS = 2500;
-
-const QUEUED_MSG = 'Guardado como borrador. Se sincronizará al reconectar.';
-
-function isGetMethod(init?: RequestInit) {
-  return (init?.method || 'GET').toUpperCase() === 'GET';
+function ok<T>(data: T | null, meta?: Record<string, unknown>): ApiResponse<T> {
+  return { ok: true, data, error: null, meta };
 }
 
-async function performFetch<T>(path: string, init?: RequestInit): Promise<ApiResponse<T>> {
-  const res = await withTimeout(
-    nativeAuthorizedFetch(path, {
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-      ...init,
-    }),
-    NETWORK_TIMEOUT_MS,
-  );
-  if (res.status === 401) {
-    return { ok: false, data: null, error: 'No autenticado' };
-  }
-  if (res.status === 204) {
-    return { ok: true, data: null, error: null };
-  }
-  return (await res.json()) as ApiResponse<T>;
+function fail<T>(error: string): ApiResponse<T> {
+  return { ok: false, data: null, error };
 }
 
-type QueuedRequestConfig<T> = {
-  kind: OfflineMutationKind;
-  label: string;
-  path: string;
-  init: RequestInit;
-  entityId?: number | string;
-  tempId?: number;
-  expectedVersion?: number;
-  optimistic: () => ApiResponse<T>;
-};
+function cachedResponse<T>(path: string, errorMsg: string): ApiResponse<T> {
+  const cached = readApiGet<T>(path);
+  if (cached != null) return ok(cached, { offline: true });
+  return fail(errorMsg);
+}
 
-async function queuedRequest<T>(config: QueuedRequestConfig<T>): Promise<ApiResponse<T>> {
-  const queueOffline = async () => {
-    const optimistic = config.optimistic();
-    if (!optimistic.ok) {
-      return optimistic;
-    }
-    await enqueue({
-      kind: config.kind,
-      label: config.label,
-      method: (config.init.method || 'POST').toUpperCase() as 'POST' | 'PUT' | 'PATCH' | 'DELETE',
-      path: config.path,
-      body: typeof config.init.body === 'string' ? config.init.body : undefined,
-      entityId: config.entityId ?? config.tempId,
-      tempId: config.tempId,
-      expectedVersion: config.expectedVersion,
-    });
-    notifyOfflineQueueChanged();
-    return {
-      ok: true,
-      data: optimistic.data,
-      error: null,
-      meta: { offline: true, queued: true, message: QUEUED_MSG },
-    };
+function mapFirebaseUser(user: ReturnType<typeof formatUser> | null): UsuarioDto | null {
+  if (!user) return null;
+  return {
+    id: user.uid,
+    nombre: user.nombre,
+    correo: user.correo,
+    rol: 'USER',
+    foto: user.foto ?? undefined,
   };
-
-  if (isBrowserOffline()) {
-    return queueOffline();
-  }
-
-  try {
-    const response = await performFetch<T>(config.path, config.init);
-    if (!response.ok) return response;
-    return response;
-  } catch {
-    return queueOffline();
-  }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<ApiResponse<T>> {
-  const isGet = isGetMethod(init);
-
-  if (!isGet && isBrowserOffline()) {
-    return { ok: false, data: null, error: OFFLINE_MSG };
+async function ensureAuthUser() {
+  const authUser = firebaseClient.auth.currentUser;
+  if (!authUser) {
+    await firebaseClient.signInAnonymously();
   }
-
-  try {
-    const json = await performFetch<T>(path, init);
-    const isGet = isGetMethod(init);
-    if (isGet && json.ok && json.data != null) {
-      cacheApiGet(path, json.data);
-      if (path === '/api/v1/session/me') {
-        cacheSessionUser(json.data as unknown as UsuarioDto);
-      }
-    }
-    return json;
-  } catch {
-    if (isGet) {
-      const cached = readApiGet<T>(path);
-      if (cached != null) {
-        return { ok: true, data: cached, error: null, meta: { offline: true } };
-      }
-    }
-    return { ok: false, data: null, error: OFFLINE_MSG };
-  }
-}
-
-async function legacyJson<T>(path: string, init?: RequestInit): Promise<{ data: T | null; error: string | null }> {
-  const isGet = isGetMethod(init);
-
-  if (!isGet && isBrowserOffline()) {
-    return { data: null, error: OFFLINE_MSG };
-  }
-
-  try {
-    const res = await nativeAuthorizedFetch(path, {
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-      ...init,
-    });
-    if (res.status === 401) {
-      return { data: null, error: 'No autenticado' };
-    }
-    const json = (await res.json()) as T & { error?: string };
-    if (json && typeof json === 'object' && 'error' in json && json.error) {
-      return { data: null, error: String(json.error) };
-    }
-    if (isGet && json != null) {
-      cacheApiGet(path, json);
-    }
-    return { data: json, error: null };
-  } catch {
-    if (isGet) {
-      const cached = readApiGet<T>(path);
-      if (cached != null) {
-        return { data: cached, error: null };
-      }
-    }
-    return { data: null, error: OFFLINE_MSG };
-  }
-}
-
-async function rawRequest<T>(path: string, init?: RequestInit): Promise<ApiResponse<T>> {
-  if (!isGetMethod(init) && isBrowserOffline()) {
-    return { ok: false, data: null, error: OFFLINE_MSG };
-  }
-  try {
-    const response = await nativeAuthorizedFetch(path, {
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-      ...init,
-    });
-    if (response.status === 204) return { ok: true, data: null, error: null };
-    const json = (await response.json()) as T & { error?: string; mensaje?: string };
-    if (!response.ok || json?.error) {
-      return {
-        ok: false,
-        data: null,
-        error: json?.error || json?.mensaje || `Error ${response.status}`,
-      };
-    }
-    return { ok: true, data: json, error: null };
-  } catch {
-    return { ok: false, data: null, error: OFFLINE_MSG };
-  }
-}
-
-export async function downloadAdminReport(
-  format: 'excel' | 'pdf' | 'csv',
-  desde: string,
-  hasta: string,
-) {
-  const params = new URLSearchParams();
-  if (desde) params.set('desde', desde);
-  if (hasta) params.set('hasta', hasta);
-  const qs = params.toString();
-  const res = await nativeAuthorizedFetch(`/admin/reportes/export/${format}${qs ? `?${qs}` : ''}`, {
-    credentials: 'include',
-  });
-  if (!res.ok) {
-    throw new Error('No se pudo descargar el reporte');
-  }
-  const blob = await res.blob();
-  const disposition = res.headers.get('Content-Disposition') || '';
-  const match = disposition.match(/filename="?([^";]+)"?/i);
-  const filename = match?.[1] || `reporte-flowday.${format === 'csv' ? 'zip' : format === 'excel' ? 'xlsx' : 'pdf'}`;
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-async function loginRequest(correo: string, contrasena: string): Promise<ApiResponse<UsuarioDto>> {
-  if (!isNative) {
-    return request<UsuarioDto>('/api/v1/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ correo, contrasena }),
-    });
-  }
-
-  if (!navigator.onLine) {
-    return {
-      ok: false,
-      data: null,
-      error: 'Necesitas conexión a internet para iniciar sesión por primera vez.',
-    };
-  }
-
-  try {
-    const response = await withTimeout(
-      fetch(apiUrl('/api/v1/mobile-auth/login'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: correo, password: contrasena }),
-      }),
-      NETWORK_TIMEOUT_MS,
-    );
-    const contentType = response.headers.get('content-type') || '';
-    if (!contentType.includes('application/json')) {
-      return {
-        ok: false,
-        data: null,
-        error: 'El backend publicado todavía no es compatible con esta versión del APK.',
-      };
-    }
-    const json = (await response.json()) as ApiResponse<unknown> & Record<string, unknown>;
-    if (!response.ok || json.ok === false) {
-      const serverError = String(json.error || json.mensaje || '');
-      const outdatedBackend =
-        response.status === 404
-        || (response.status === 401 && serverError.toLowerCase().includes('no autenticado'));
-      return {
-        ok: false,
-        data: null,
-        error: outdatedBackend
-          ? 'El backend móvil aún no está desplegado en Render.'
-          : serverError || 'Correo o contraseña incorrectos',
-      };
-    }
-    const container = (json.data && typeof json.data === 'object' ? json.data : json) as Record<string, unknown>;
-    await storeNativeTokens(container);
-    const user = (container.usuario ?? container.user ?? container) as UsuarioDto;
-    if (!user?.id) {
-      return { ok: false, data: null, error: 'Respuesta de autenticación inválida' };
-    }
-    return { ok: true, data: user, error: null };
-  } catch {
-    return {
-      ok: false,
-      data: null,
-      error: navigator.onLine
-        ? 'No se pudo conectar con Render. Comprueba que el servicio esté activo y permita el acceso del APK.'
-        : 'Sin conexión a internet.',
-    };
-  }
-}
-
-async function mobileCompatibilityRequest(): Promise<ApiResponse<{ ready: boolean }>> {
-  if (!isNative) return { ok: true, data: { ready: true }, error: null };
-  if (!navigator.onLine) return { ok: false, data: null, error: 'Sin conexión a internet' };
-  try {
-    const response = await withTimeout(fetch(apiUrl('/api/v1/mobile-auth/oauth-contract')), NETWORK_TIMEOUT_MS);
-    if (!response.ok || !(response.headers.get('content-type') || '').includes('application/json')) {
-      return {
-        ok: false,
-        data: null,
-        error: 'El backend móvil pendiente todavía no está desplegado.',
-      };
-    }
-    return { ok: true, data: { ready: true }, error: null };
-  } catch {
-    return { ok: false, data: null, error: 'No se pudo contactar con el backend de Render.' };
-  }
-}
-
-async function logoutRequest(): Promise<ApiResponse<void>> {
-  if (!isNative) {
-    return request<void>('/api/v1/auth/logout', { method: 'POST', body: '{}' });
-  }
-  try {
-    await refreshNativeAccessToken();
-    const refreshToken = await getNativeRefreshToken();
-    await nativeAuthorizedFetch('/api/v1/mobile-auth/logout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
-  } finally {
-    await clearNativeTokens();
-  }
-  return { ok: true, data: null, error: null };
-}
-
-async function queuedLegacyMutation(
-  kind: OfflineMutationKind,
-  label: string,
-  path: string,
-  body: Record<string, unknown>,
-  optimistic: () => void,
-): Promise<{ data: { mensaje: string } | null; error: string | null }> {
-  const queue = async () => {
-    optimistic();
-    await enqueue({
-      kind,
-      label,
-      method: 'POST',
-      path,
-      body: JSON.stringify(body),
-    });
-    notifyOfflineQueueChanged();
-    return { data: { mensaje: QUEUED_MSG }, error: null };
-  };
-  if (isBrowserOffline()) return queue();
-  const result = await legacyJson<{ mensaje: string }>(path, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-  return result.error === OFFLINE_MSG ? queue() : result;
 }
 
 export const api = {
-  me: () => request<UsuarioDto>('/api/v1/session/me'),
-  login: loginRequest,
-  mobileCompatibility: mobileCompatibilityRequest,
-  adminLogin: (correo: string, contrasena: string) =>
-    request<UsuarioDto>('/api/v1/auth/admin-login', {
-      method: 'POST',
-      body: JSON.stringify({ correo, contrasena }),
-    }),
-  logout: logoutRequest,
-  oauthProviders: () => request<string[]>('/api/v1/auth/oauth-providers'),
-  register: (payload: {
-    nombre: string;
-    correo: string;
-    contrasena: string;
-    telefono: string;
-    fechaNacimiento?: string;
-    genero?: string;
-  }) =>
-    request<{ mensaje: string }>('/api/v1/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  forgotPassword: (correo: string, telefono: string) =>
-    request<{ mensaje: string }>('/api/v1/auth/forgot-password', {
-      method: 'POST',
-      body: JSON.stringify({ correo, telefono }),
-    }),
-  resetPasswordSession: () => request<{ active: boolean }>('/api/v1/auth/reset-password/session'),
-  resetPassword: (contrasenaNueva: string, contrasenaConfirmacion: string) =>
-    request<{ mensaje: string }>('/api/v1/auth/reset-password', {
-      method: 'POST',
-      body: JSON.stringify({ contrasenaNueva, contrasenaConfirmacion }),
-    }),
+  me: async () => {
+    await ensureAuthUser();
+    const current = formatUser(firebaseClient.auth.currentUser);
+    const user = mapFirebaseUser(current);
+    if (!user) return fail<UsuarioDto>('No hay sesión activa');
+    cacheSessionUser(user);
+    return ok(user);
+  },
+
+  login: async (correo: string, contrasena: string) => {
+    try {
+      const userCredential = await firebaseClient.signInWithEmail(correo, contrasena);
+      const user = mapFirebaseUser(formatUser(userCredential.user));
+      return user ? ok(user) : fail<UsuarioDto>('No se pudo iniciar sesión.');
+    } catch (error: unknown) {
+      const err = error as { code?: string; message?: string };
+      const message = err.code === 'auth/wrong-password'
+        ? 'Correo o contraseña incorrectos.'
+        : err.code === 'auth/user-not-found'
+          ? 'No existe una cuenta con ese correo.'
+          : String(err.message || 'No se pudo iniciar sesión');
+      return fail<UsuarioDto>(message);
+    }
+  },
+
+  register: async (payload: { nombre: string; correo: string; contrasena: string; telefono: string; fechaNacimiento?: string; genero?: string; }) => {
+    try {
+      const userCredential = await firebaseClient.createUserWithEmail(payload.correo, payload.contrasena);
+      await firebaseData.updateProfile({
+        nombre: payload.nombre,
+        telefono: payload.telefono,
+        fechaNacimiento: payload.fechaNacimiento,
+        genero: payload.genero,
+      });
+      const user = mapFirebaseUser(formatUser(userCredential.user));
+      return user ? ok(user) : fail<UsuarioDto>('Registro completado, pero no se pudo recuperar el usuario.');
+    } catch (error: unknown) {
+      const err = error as { code?: string; message?: string };
+      const message = err.code === 'auth/email-already-in-use'
+        ? 'Este correo ya está registrado.'
+        : String(err.message || 'No se pudo crear la cuenta');
+      return fail<UsuarioDto>(message);
+    }
+  },
+
+  forgotPassword: async (correo: string) => {
+    try {
+      await firebaseClient.sendResetEmail(correo);
+      return ok({ mensaje: 'Se ha enviado un correo para restablecer la contraseña.' });
+    } catch (error: unknown) {
+      const err = error as { code?: string; message?: string };
+      return fail({ mensaje: String(err.message || 'No se pudo enviar el correo de restablecimiento.') });
+    }
+  },
+
+  resetPasswordSession: async () => ok({ active: false }),
+  resetPassword: async () => fail({ mensaje: 'Restablecimiento de contraseña no soportado desde la app.' }),
+  oauthProviders: async () => ok(['google']),
+  loginWithGoogle: async () => {
+    try {
+      const userCredential = await firebaseClient.signInWithGoogle();
+      const user = mapFirebaseUser(formatUser(userCredential.user));
+      return user ? ok(user) : fail<UsuarioDto>('No se pudo iniciar sesión con Google.');
+    } catch (error: unknown) {
+      const err = error as { code?: string; message?: string };
+      const message = err.code === 'auth/popup-closed-by-user'
+        ? 'Inicio de sesión cancelado.'
+        : String(err.message || 'No se pudo iniciar sesión con Google.');
+      return fail<UsuarioDto>(message);
+    }
+  },
+  continueAsGuest: async () => {
+    try {
+      await ensureAuthUser();
+      const current = formatUser(firebaseClient.auth.currentUser);
+      const user = mapFirebaseUser(current);
+      return user ? ok(user) : fail<UsuarioDto>('No se pudo continuar como invitado.');
+    } catch (error: unknown) {
+      return fail<UsuarioDto>(String((error as Error).message || 'No se pudo continuar como invitado.'));
+    }
+  },
+  mobileCompatibility: async () => ok(true),
+  adminLogin: async () => fail<UsuarioDto>('Funcionalidad no disponible'),
+  logout: async () => {
+    try {
+      await firebaseClient.signOut();
+      await firebaseClient.signInAnonymously();
+      return ok(null);
+    } catch {
+      return fail<void>('No se pudo cerrar la sesión.');
+    }
+  },
 
   activities: {
-    list: () => request<ActividadListItem[]>('/api/v1/activities'),
-    get: (id: number) => {
-      if (id < 0) {
-        const cached = readApiGet<ActividadDetail>(`/api/v1/activities/${id}`);
-        if (cached) {
-          return Promise.resolve({
-            ok: true,
-            data: cached,
-            error: null,
-            meta: { offline: true, draft: true },
-          });
-        }
-        return Promise.resolve({ ok: false, data: null, error: 'Borrador no encontrado' });
+    list: async () => {
+      await ensureAuthUser();
+      try {
+        const items = await firebaseData.listActivities();
+        return ok(items);
+      } catch {
+        return cachedResponse<ActividadListItem[]>('/api/v1/activities', 'No se pudieron cargar las actividades');
       }
-      return request<ActividadDetail>(`/api/v1/activities/${id}`);
     },
-    byDate: (fecha: string) =>
-      request<ActividadListItem[]>(`/api/v1/activities/by-date?fecha=${encodeURIComponent(fecha)}`),
-    byMonth: (year: number, month: number) =>
-      request<ActividadListItem[]>(
-        `/api/v1/activities/by-month?year=${year}&month=${month}`,
-      ),
-    create: (payload: CreateActividadPayload) => {
-      const tempId = allocateTempId();
-      const body = JSON.stringify(payload);
-      return queuedRequest<ActividadDetail>({
-        kind: 'activity.create',
-        label: `Crear actividad: ${payload.titulo}`,
-        path: '/api/v1/activities',
-        init: { method: 'POST', body },
-        tempId,
-        optimistic: () => {
-          const detail = buildOptimisticActivity(payload, tempId);
-          applyActivityCreate(detail);
-          return { ok: true, data: detail, error: null };
-        },
-      });
+    get: async (id: number | string) => {
+      await ensureAuthUser();
+      const cached = readApiGet<ActividadDetail>(`/api/v1/activities/${id}`);
+      if (cached) return ok(cached);
+      try {
+        const item = await firebaseData.getActivity(String(id));
+        return item ? ok(item) : fail<ActividadDetail>('Actividad no encontrada');
+      } catch {
+        return cached ? ok(cached, { offline: true }) : fail<ActividadDetail>('No se pudo cargar la actividad');
+      }
     },
-    update: (id: number, payload: UpdateActividadPayload) => {
-      const body = JSON.stringify(payload);
-      return queuedRequest<ActividadDetail>({
-        kind: 'activity.update',
-        label: `Actualizar actividad: ${payload.titulo}`,
-        path: `/api/v1/activities/${id}`,
-        init: { method: 'PUT', body },
-        entityId: id,
-        expectedVersion:
-          readApiGet<ActividadDetail>(`/api/v1/activities/${id}`)?.version
-          ?? readApiGet<ActividadListItem[]>('/api/v1/activities')?.find((activity) => activity.id === id)?.version,
-        optimistic: () => {
-          const existing =
-            readApiGet<ActividadDetail>(`/api/v1/activities/${id}`)
-            ?? readApiGet<ActividadListItem[]>('/api/v1/activities')?.find((activity) => activity.id === id);
-          if (!existing) return { ok: false, data: null, error: 'Actividad no disponible offline' };
-          applyActivityUpdate(id, payload);
-          const detail = readApiGet<ActividadDetail>(`/api/v1/activities/${id}`);
-          return detail
-            ? { ok: true, data: detail, error: null }
-            : { ok: false, data: null, error: OFFLINE_MSG };
-        },
-      });
+    byDate: async (fecha: string) => {
+      await ensureAuthUser();
+      try {
+        const items = await firebaseData.listActivitiesByDate(fecha);
+        return ok(items);
+      } catch {
+        return cachedResponse<ActividadListItem[]>(`/api/v1/activities/by-date?fecha=${encodeURIComponent(fecha)}`, 'No se pudieron cargar las actividades por fecha');
+      }
     },
-    updateStatus: (id: number, estado: string) => {
-      const body = JSON.stringify({ estado });
-      return queuedRequest<ActividadListItem>({
-        kind: 'activity.status',
-        label: 'Cambiar estado de actividad',
-        path: `/api/v1/activities/${id}/status`,
-        init: { method: 'PATCH', body },
-        entityId: id,
-        expectedVersion:
-          readApiGet<ActividadDetail>(`/api/v1/activities/${id}`)?.version
-          ?? readApiGet<ActividadListItem[]>('/api/v1/activities')?.find((activity) => activity.id === id)?.version,
-        optimistic: () => {
-          const existing =
-            readApiGet<ActividadDetail>(`/api/v1/activities/${id}`)
-            ?? readApiGet<ActividadListItem[]>('/api/v1/activities')?.find((activity) => activity.id === id);
-          if (!existing) return { ok: false, data: null, error: 'Actividad no disponible offline' };
-          applyActivityStatus(id, estado);
-          const list = readApiGet<ActividadListItem[]>('/api/v1/activities');
-          const item = list?.find((a) => a.id === id);
-          return item
-            ? { ok: true, data: item, error: null }
-            : { ok: false, data: null, error: OFFLINE_MSG };
-        },
-      });
+    byMonth: async (year: number, month: number) => {
+      await ensureAuthUser();
+      try {
+        const items = await firebaseData.listActivitiesByMonth(year, month);
+        return ok(items);
+      } catch {
+        return cachedResponse<ActividadListItem[]>(`/api/v1/activities/by-month?year=${year}&month=${month}`, 'No se pudo cargar el horario mensual');
+      }
     },
-    remove: (id: number) =>
-      queuedRequest<void>({
-        kind: 'activity.delete',
-        label: 'Eliminar actividad',
-        path: `/api/v1/activities/${id}`,
-        init: { method: 'DELETE' },
-        entityId: id,
-        expectedVersion:
-          readApiGet<ActividadDetail>(`/api/v1/activities/${id}`)?.version
-          ?? readApiGet<ActividadListItem[]>('/api/v1/activities')?.find((activity) => activity.id === id)?.version,
-        optimistic: () => {
-          applyActivityDelete(id);
-          return { ok: true, data: null, error: null };
-        },
-      }),
-    priorityAlerts: () => request<PriorityAlert[]>('/api/v1/activities/priority-alerts'),
-    reschedulable: () => request<ReschedulableItem[]>('/api/v1/activities/reschedulable'),
-    reschedule: (id: number, fecha: string, hora?: string) => {
-      const body = JSON.stringify({ fecha, hora: hora || null });
-      return queuedRequest<ActividadDetail>({
-        kind: 'activity.reschedule',
-        label: 'Reprogramar actividad',
-        path: `/api/v1/activities/${id}/reschedule`,
-        init: { method: 'POST', body },
-        entityId: id,
-        expectedVersion:
-          readApiGet<ActividadDetail>(`/api/v1/activities/${id}`)?.version
-          ?? readApiGet<ActividadListItem[]>('/api/v1/activities')?.find((activity) => activity.id === id)?.version,
-        optimistic: () => {
-          const existing =
-            readApiGet<ActividadDetail>(`/api/v1/activities/${id}`)
-            ?? readApiGet<ActividadListItem[]>('/api/v1/activities')?.find((activity) => activity.id === id);
-          if (!existing) return { ok: false, data: null, error: 'Actividad no disponible offline' };
-          applyActivityReschedule(id, fecha, hora);
-          const detail = readApiGet<ActividadDetail>(`/api/v1/activities/${id}`);
-          return detail
-            ? { ok: true, data: detail, error: null }
-            : { ok: false, data: null, error: OFFLINE_MSG };
-        },
-      });
+    create: async (payload: CreateActividadPayload) => {
+      await ensureAuthUser();
+      try {
+        const detail = await firebaseData.createActivity(payload);
+        return ok(detail);
+      } catch (error: unknown) {
+        return fail<ActividadDetail>(String((error as Error).message || 'No se pudo crear la actividad'));
+      }
+    },
+    update: async (id: number, payload: UpdateActividadPayload) => {
+      await ensureAuthUser();
+      try {
+        const detail = await firebaseData.updateActivity(String(id), payload);
+        return detail ? ok(detail) : fail<ActividadDetail>('Actividad no encontrada');
+      } catch (error: unknown) {
+        return fail<ActividadDetail>(String((error as Error).message || 'No se pudo actualizar la actividad'));
+      }
+    },
+    updateStatus: async (id: number, estado: string) => {
+      await ensureAuthUser();
+      try {
+        const item = await firebaseData.updateActivityStatus(String(id), estado);
+        return item ? ok(item) : fail<ActividadListItem>('Actividad no encontrada');
+      } catch (error: unknown) {
+        return fail<ActividadListItem>(String((error as Error).message || 'No se pudo actualizar el estado'));
+      }
+    },
+    remove: async (id: number) => {
+      await ensureAuthUser();
+      try {
+        await firebaseData.removeActivity(String(id));
+        return ok(null);
+      } catch (error: unknown) {
+        return fail<void>(String((error as Error).message || 'No se pudo eliminar la actividad'));
+      }
+    },
+    priorityAlerts: async () => {
+      await ensureAuthUser();
+      try {
+        const items = await firebaseData.priorityAlerts();
+        return ok(items);
+      } catch {
+        return ok([]);
+      }
+    },
+    reschedulable: async () => {
+      await ensureAuthUser();
+      try {
+        const items = await firebaseData.reschedulable();
+        return ok(items);
+      } catch {
+        return ok([]);
+      }
+    },
+    reschedule: async (id: number, fecha: string, hora?: string) => {
+      await ensureAuthUser();
+      try {
+        const detail = await firebaseData.reschedule(String(id), fecha, hora);
+        return detail ? ok(detail) : fail<ActividadDetail>('No se pudo reagendar');
+      } catch (error: unknown) {
+        return fail<ActividadDetail>(String((error as Error).message || 'No se pudo reagendar la actividad'));
+      }
     },
   },
 
-  ia: {
-    chat: async (mensaje: string, historial?: { rol: string; contenido: string }[]) => {
-      const res = await nativeAuthorizedFetch('/api/ia/chat', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mensaje,
-          idempotencyKey: crypto.randomUUID(),
-          historial: (historial ?? []).map((m) => ({
-            role: m.rol === 'user' ? 'user' : 'assistant',
-            text: m.contenido,
-          })),
-        }),
-      });
-      if (res.status === 401) return { ok: false, data: null, error: 'Sesión expirada. Vuelve a iniciar sesión.' };
-      const json = await res.json();
-      if (json.ok === false) return { ok: false, data: null, error: json.mensaje || 'Error IA' };
-      return { ok: true, data: json as { respuesta: string; ia?: boolean; fallback?: boolean }, error: null };
+  schedule: {
+    list: async () => {
+      await ensureAuthUser();
+      try {
+        const blocks = await firebaseData.listSchedule();
+        return ok(blocks);
+      } catch {
+        return cachedResponse<ScheduleBlock[]>('/api/v1/schedule/blocks', 'No se pudo cargar el horario');
+      }
     },
-    status: async () => {
-      const res = await nativeAuthorizedFetch('/api/ia/status', { credentials: 'include' });
-      const json = await res.json();
-      if (json.ok === false) return { ok: false, data: null, error: json.error || 'No autenticado' };
-      return {
-        ok: true,
-        data: json as { provider: string; groqConfigured: boolean; ready: boolean },
-        error: null,
-      };
+    create: async (payload: CreateScheduleBlockPayload) => {
+      await ensureAuthUser();
+      try {
+        const block = await firebaseData.createScheduleBlock(payload as any);
+        return ok(block);
+      } catch (error: unknown) {
+        return fail<ScheduleBlock>(String((error as Error).message || 'No se pudo crear el bloque')); 
+      }
+    },
+    update: async (id: number, payload: CreateScheduleBlockPayload) => {
+      await ensureAuthUser();
+      try {
+        const block = await firebaseData.updateScheduleBlock(String(id), payload as any);
+        return block ? ok(block) : fail<ScheduleBlock>('Bloque no encontrado');
+      } catch (error: unknown) {
+        return fail<ScheduleBlock>(String((error as Error).message || 'No se pudo actualizar el bloque'));
+      }
+    },
+    remove: async (id: number) => {
+      await ensureAuthUser();
+      try {
+        await firebaseData.removeScheduleBlock(String(id));
+        return ok(null);
+      } catch (error: unknown) {
+        return fail<void>(String((error as Error).message || 'No se pudo eliminar el bloque')); 
+      }
+    },
+    alert: async (minutesBefore?: number) => {
+      await ensureAuthUser();
+      try {
+        const alert = await firebaseData.scheduleAlert();
+        return ok(alert as ScheduleAlert | null);
+      } catch {
+        return ok(null);
+      }
     },
   },
 
-  assistant: {
-    message: (
-      mensaje: string,
-      historial?: { rol: string; contenido: string }[],
-    ) =>
-      rawRequest<AssistantMessageResponse>('/api/v1/assistant/messages', {
-        method: 'POST',
-        body: JSON.stringify({
-          mensaje,
-          historial: (historial ?? []).map((m) => ({
-            role: m.rol === 'user' ? 'user' : 'assistant',
-            text: m.contenido,
-          })),
-        }),
-      }),
-    confirm: (proposalId: string) =>
-      rawRequest<AssistantProposal>(
-        `/api/v1/assistant/actions/${encodeURIComponent(proposalId)}/confirm`,
-        { method: 'POST', body: '{}' },
-      ),
-    cancel: (proposalId: string) =>
-      rawRequest<AssistantProposal>(
-        `/api/v1/assistant/actions/${encodeURIComponent(proposalId)}/cancel`,
-        { method: 'POST', body: '{}' },
-      ),
-  },
-
-  notifications: {
-    list: () => request<NotificationItem[]>('/api/v1/notifications'),
-    unreadCount: () => request<{ count: number }>('/api/v1/notifications/unread-count'),
-    markRead: (id: number) =>
-      queuedRequest<{ ok: boolean; count: number }>({
-        kind: 'notification.read',
-        label: 'Marcar notificación como leída',
-        path: `/api/v1/notifications/${id}/read`,
-        init: { method: 'POST', body: '{}' },
-        entityId: id,
-        optimistic: () => {
-          applyNotificationRead(id);
-          const count = readApiGet<{ count: number }>('/api/v1/notifications/unread-count')?.count ?? 0;
-          return { ok: true, data: { ok: true, count }, error: null };
-        },
-      }),
-    markAllRead: () =>
-      queuedRequest<{ ok: boolean; count: number }>({
-        kind: 'notification.readAll',
-        label: 'Marcar todas las notificaciones como leídas',
-        path: '/api/v1/notifications/read-all',
-        init: { method: 'POST', body: '{}' },
-        optimistic: () => {
-          applyNotificationRead();
-          return { ok: true, data: { ok: true, count: 0 }, error: null };
-        },
-      }),
-    remove: (id: number) =>
-      queuedRequest<{ ok: boolean; count: number }>({
-        kind: 'notification.delete',
-        label: 'Eliminar notificación',
-        path: `/api/v1/notifications/${id}`,
-        init: { method: 'DELETE' },
-        entityId: id,
-        optimistic: () => {
-          applyNotificationDelete(id);
-          const count = readApiGet<{ count: number }>('/api/v1/notifications/unread-count')?.count ?? 0;
-          return { ok: true, data: { ok: true, count }, error: null };
-        },
-      }),
+  notes: {
+    list: async () => {
+      await ensureAuthUser();
+      try {
+        const notes = await firebaseData.listNotes();
+        return ok(notes);
+      } catch {
+        return cachedResponse<Note[]>('/api/v1/notas', 'No se pudieron cargar las notas');
+      }
+    },
+    create: async (titulo: string, contenido: string, color: string, pinned: boolean) => {
+      await ensureAuthUser();
+      try {
+        const note = await firebaseData.createNote({ titulo, contenido, color, pinned });
+        return ok(note);
+      } catch (error: unknown) {
+        return fail<Note>(String((error as Error).message || 'No se pudo crear la nota'));
+      }
+    },
+    update: async (id: string, patch: Partial<Note>) => {
+      await ensureAuthUser();
+      try {
+        const note = await firebaseData.updateNote(id, patch);
+        return note ? ok(note) : fail<Note>('Nota no encontrada');
+      } catch (error: unknown) {
+        return fail<Note>(String((error as Error).message || 'No se pudo actualizar la nota'));
+      }
+    },
+    remove: async (id: string) => {
+      await ensureAuthUser();
+      try {
+        await firebaseData.removeNote(id);
+        return ok(null);
+      } catch (error: unknown) {
+        return fail<void>(String((error as Error).message || 'No se pudo eliminar la nota'));
+      }
+    },
   },
 
   profile: {
-    get: () => request<Profile>('/api/v1/profile'),
-    update: (payload: UpdateProfilePayload) =>
-      queuedRequest<Profile>({
-        kind: 'profile.update',
-        label: 'Actualizar perfil',
-        path: '/api/v1/profile',
-        init: { method: 'PATCH', body: JSON.stringify(payload) },
-        optimistic: () => {
-          const profile = applyProfileUpdate(payload);
-          return profile
-            ? { ok: true, data: profile, error: null }
-            : { ok: false, data: null, error: 'Abre tu perfil con conexión antes de editarlo offline.' };
-        },
-      }),
-    changePassword: (contrasenaActual: string, contrasenaNueva: string, contrasenaConfirmacion: string) =>
-      request<void>('/api/v1/profile/password', {
-        method: 'POST',
-        body: JSON.stringify({ contrasenaActual, contrasenaNueva, contrasenaConfirmacion }),
-      }),
-    changeTheme: (tema: string) =>
-      queuedRequest<Profile>({
-        kind: 'profile.theme',
-        label: 'Cambiar tema',
-        path: '/api/v1/profile/theme',
-        init: { method: 'PATCH', body: JSON.stringify({ tema }) },
-        optimistic: () => {
-          const profile = applyProfileUpdate({ tema });
-          return profile
-            ? { ok: true, data: profile, error: null }
-            : { ok: false, data: null, error: 'Perfil no disponible offline' };
-        },
-      }),
-    uploadPhoto: async (file: File): Promise<ApiResponse<Profile>> => {
-      const form = new FormData();
-      form.append('foto', file);
-      const res = await nativeAuthorizedFetch('/api/v1/profile/photo', {
-        method: 'POST',
-        credentials: 'include',
-        body: form,
-      });
-      if (res.status === 401) {
-        return { ok: false, data: null, error: 'No autenticado' };
+    get: async () => {
+      try {
+        const profile = await firebaseData.getProfile();
+        return ok(profile);
+      } catch {
+        return fail<Profile>('No se pudo cargar el perfil');
       }
-      return res.json();
+    },
+    update: async (payload: UpdateProfilePayload) => {
+      try {
+        const profile = await firebaseData.updateProfile(payload);
+        return ok(profile);
+      } catch (error: unknown) {
+        return fail<Profile>(String((error as Error).message || 'No se pudo actualizar el perfil'));
+      }
+    },
+    changePassword: async (currentPassword: string, nueva: string, confirmacion: string) => {
+      if (nueva !== confirmacion) return fail<void>('Las contraseñas no coinciden');
+      try {
+        await firebaseClient.updatePassword(nueva);
+        return ok(null);
+      } catch (error: unknown) {
+        return fail<void>(String((error as Error).message || 'No se pudo cambiar la contraseña'));
+      }
+    },
+    changeTheme: async (tema: string) => {
+      try {
+        const profile = await firebaseData.changeTheme(tema);
+        return ok(profile);
+      } catch (error: unknown) {
+        return fail<Profile>(String((error as Error).message || 'No se pudo cambiar el tema'));
+      }
+    },
+    uploadPhoto: async () => fail<Profile>('Carga de foto no soportada en esta versión'),
+  },
+
+  bienestar: {
+    stats: async () => {
+      try {
+        const stats = await firebaseData.getWellbeingStats();
+        return ok(stats);
+      } catch {
+        return fail<WellbeingStats>('No se pudieron cargar las estadísticas de bienestar');
+      }
+    },
+    stress: async () => {
+      try {
+        const stress = await firebaseData.getStressReport();
+        return ok(stress);
+      } catch {
+        return fail<StressReport>('No se pudo cargar el informe de estrés');
+      }
+    },
+    savePomodoro: async (mins: number) => {
+      try {
+        const result = await firebaseData.savePomodoro(mins);
+        return ok(result);
+      } catch (error: unknown) {
+        return fail<{ mensaje: string }>(String((error as Error).message || 'No se pudo guardar el pomodoro'));
+      }
+    },
+    savePause: async (tipo: string, mins: number) => {
+      try {
+        const result = await firebaseData.savePause(tipo, mins);
+        return ok(result);
+      } catch (error: unknown) {
+        return fail<{ mensaje: string }>(String((error as Error).message || 'No se pudo guardar la pausa'));
+      }
     },
   },
 
   community: {
-    stats: () => request<CommunityStats>('/api/v1/community/stats'),
-    users: (query?: string) => {
-      const qs = query ? `?query=${encodeURIComponent(query)}` : '';
-      return request<CommunityUser[]>(`/api/v1/community/users${qs}`);
-    },
-    suggestions: (limit = 4) =>
-      request<CommunityUser[]>(`/api/v1/community/suggestions?limit=${limit}`),
-    connections: () => request<UsuarioDto[]>('/api/v1/community/connections'),
-    connect: (userId: number) =>
-      queuedRequest<{ mensaje: string }>({
-        kind: 'community.connect',
-        label: 'Enviar solicitud de amistad',
-        path: '/api/v1/community/connections',
-        init: { method: 'POST', body: JSON.stringify({ userId }) },
-        entityId: userId,
-        optimistic: () => {
-          applyCommunityConnect(userId);
-          return { ok: true, data: { mensaje: QUEUED_MSG }, error: null };
-        },
-      }),
-    accept: (conexionId: number) =>
-      queuedRequest<{ mensaje: string }>({
-        kind: 'community.accept',
-        label: 'Aceptar solicitud de amistad',
-        path: `/api/v1/community/connections/${conexionId}/accept`,
-        init: { method: 'POST', body: '{}' },
-        entityId: conexionId,
-        optimistic: () => {
-          applyCommunityDecision(conexionId, 'CONECTADO');
-          return { ok: true, data: { mensaje: QUEUED_MSG }, error: null };
-        },
-      }),
-    reject: (conexionId: number) =>
-      queuedRequest<{ mensaje: string }>({
-        kind: 'community.reject',
-        label: 'Rechazar solicitud de amistad',
-        path: `/api/v1/community/connections/${conexionId}/reject`,
-        init: { method: 'POST', body: '{}' },
-        entityId: conexionId,
-        optimistic: () => {
-          applyCommunityDecision(conexionId, 'NINGUNA');
-          return { ok: true, data: { mensaje: QUEUED_MSG }, error: null };
-        },
-      }),
-    removeConnection: (conexionId: number) =>
-      queuedRequest<void>({
-        kind: 'community.remove',
-        label: 'Eliminar conexión',
-        path: `/api/v1/community/connections/${conexionId}`,
-        init: { method: 'DELETE' },
-        entityId: conexionId,
-        optimistic: () => {
-          applyCommunityDecision(conexionId, 'NINGUNA');
-          return { ok: true, data: null, error: null };
-        },
-      }),
+    stats: async () => fail<CommunityStats>('Funcionalidad de comunidad no disponible'),
+    users: async () => ok([]),
+    suggestions: async (limit: number) => ok([]),
+    connections: async () => ok([]),
+    connect: async () => fail<void>('Funcionalidad de comunidad no disponible'),
+    accept: async () => fail<void>('Funcionalidad de comunidad no disponible'),
+    reject: async () => fail<void>('Funcionalidad de comunidad no disponible'),
+    remove: async () => fail<void>('Funcionalidad de comunidad no disponible'),
   },
 
   chat: {
-    conversations: () => request<Conversation[]>('/api/v1/chat/conversations'),
-    messages: (userId: number) => request<ChatMessage[]>(`/api/v1/chat/messages/${userId}`),
-    send: (destinatarioId: number, contenido: string) => {
-      const tempId = allocateTempId();
-      return queuedRequest<ChatMessage>({
-        kind: 'chat.send',
-        label: 'Enviar mensaje',
-        path: '/api/v1/chat/messages',
-        init: { method: 'POST', body: JSON.stringify({ destinatarioId, contenido }) },
-        tempId,
-        optimistic: () => ({
-          ok: true,
-          data: applyChatSend(destinatarioId, contenido, tempId),
-          error: null,
-        }),
-      });
-    },
-    markRead: (userId: number) =>
-      queuedRequest<{ updated: number }>({
-        kind: 'chat.read',
-        label: 'Marcar conversación como leída',
-        path: `/api/v1/chat/messages/${userId}/read`,
-        init: { method: 'POST', body: '{}' },
-        entityId: userId,
-        optimistic: () => {
-          applyChatRead(userId);
-          return { ok: true, data: { updated: 0 }, error: null };
-        },
-      }),
-    unreadCount: () => request<{ count: number }>('/api/v1/chat/unread-count'),
-    deleteConversation: (userId: number) =>
-      queuedRequest<{ deleted: number }>({
-        kind: 'chat.delete',
-        label: 'Eliminar conversación',
-        path: `/api/v1/chat/conversations/${userId}`,
-        init: { method: 'DELETE' },
-        entityId: userId,
-        optimistic: () => {
-          applyChatDelete(userId);
-          return { ok: true, data: { deleted: 0 }, error: null };
-        },
-      }),
+    conversations: async () => ok([]),
+    messages: async () => ok([]),
+    send: async () => fail<any>('Chat no disponible'),
+    markRead: async () => fail<any>('Chat no disponible'),
+    deleteConversation: async () => fail<any>('Chat no disponible'),
+    unreadCount: async () => ok({ count: 0 }),
   },
 
-  schedule: {
-    list: () => request<ScheduleBlock[]>('/api/v1/schedule/blocks'),
-    create: (payload: CreateScheduleBlockPayload) => {
-      const tempId = allocateTempId();
-      const body = JSON.stringify(payload);
-      return queuedRequest<ScheduleBlock>({
-        kind: 'schedule.create',
-        label: `Agregar materia: ${payload.materia}`,
-        path: '/api/v1/schedule/blocks',
-        init: { method: 'POST', body },
-        tempId,
-        optimistic: () => {
-          const block = buildOptimisticScheduleBlock(payload, tempId);
-          applyScheduleCreate(block);
-          return { ok: true, data: block, error: null };
-        },
-      });
-    },
-    update: (id: number, payload: CreateScheduleBlockPayload) => {
-      const body = JSON.stringify(payload);
-      return queuedRequest<ScheduleBlock>({
-        kind: 'schedule.update',
-        label: `Actualizar materia: ${payload.materia}`,
-        path: `/api/v1/schedule/blocks/${id}`,
-        init: { method: 'PUT', body },
-        entityId: id,
-        expectedVersion: readApiGet<ScheduleBlock[]>('/api/v1/schedule/blocks')
-          ?.find((block) => block.id === id)?.version,
-        optimistic: () => {
-          const existing = readApiGet<ScheduleBlock[]>('/api/v1/schedule/blocks')?.find((block) => block.id === id);
-          if (!existing) return { ok: false, data: null, error: 'Clase no disponible offline' };
-          applyScheduleUpdate(id, payload);
-          const list = readApiGet<ScheduleBlock[]>('/api/v1/schedule/blocks');
-          const block = list?.find((b) => b.id === id);
-          return block
-            ? { ok: true, data: block, error: null }
-            : { ok: false, data: null, error: OFFLINE_MSG };
-        },
-      });
-    },
-    remove: (id: number) =>
-      queuedRequest<void>({
-        kind: 'schedule.delete',
-        label: 'Eliminar materia del horario',
-        path: `/api/v1/schedule/blocks/${id}`,
-        init: { method: 'DELETE' },
-        entityId: id,
-        expectedVersion: readApiGet<ScheduleBlock[]>('/api/v1/schedule/blocks')
-          ?.find((block) => block.id === id)?.version,
-        optimistic: () => {
-          applyScheduleDelete(id);
-          return { ok: true, data: null, error: null };
-        },
-      }),
-    alert: (minutesBefore = 15) =>
-      request<ScheduleAlert | null>(`/api/v1/schedule/alert?minutesBefore=${minutesBefore}`),
+  notifications: {
+    list: async () => ok([]),
+    unreadCount: async () => ok({ count: 0 }),
+    markRead: async () => ok({ ok: true, count: 0 }),
+    markAllRead: async () => ok({ ok: true, count: 0 }),
+    remove: async () => ok({ ok: true, count: 0 }),
   },
 
-  notes: {
-    list: () => request<Note[]>('/api/v1/notas'),
-    create: (titulo: string, contenido: string, color: string, pinned = false) => {
-      const id = crypto.randomUUID();
-      const note = buildOptimisticNote(id, titulo, contenido, color, pinned);
-      const body = JSON.stringify({ id, titulo, contenido, color, pinned, updatedAt: note.updatedAt });
-      return queuedRequest<Note>({
-        kind: 'note.create',
-        label: `Crear nota: ${titulo}`,
-        path: '/api/v1/notas',
-        init: { method: 'POST', body },
-        entityId: id,
-        optimistic: () => {
-          applyNoteCreate(note);
-          return { ok: true, data: note, error: null };
-        },
-      });
-    },
-    update: (id: string, patch: Partial<Omit<Note, 'id' | 'createdAt'>>) => {
-      const existing = readApiGet<Note[]>('/api/v1/notas')?.find((n) => n.id === id)
-        ?? readApiGet<Note>(`/api/v1/notas/${id}`);
-      const updatedAt = new Date().toISOString();
-      const body = JSON.stringify({ id, ...patch, updatedAt });
-      return queuedRequest<Note>({
-        kind: 'note.update',
-        label: `Actualizar nota`,
-        path: '/api/v1/notas',
-        init: { method: 'POST', body },
-        entityId: id,
-        optimistic: () => {
-          if (!existing) return { ok: false, data: null, error: 'Nota no disponible offline' };
-          applyNoteUpdate(id, patch);
-          const updated = readApiGet<Note[]>('/api/v1/notas')?.find((n) => n.id === id);
-          return updated
-            ? { ok: true, data: updated, error: null }
-            : { ok: false, data: null, error: OFFLINE_MSG };
-        },
-      });
-    },
-    remove: (id: string) =>
-      queuedRequest<void>({
-        kind: 'note.delete',
-        label: 'Eliminar nota',
-        path: `/api/v1/notas/${id}`,
-        init: { method: 'DELETE' },
-        entityId: id,
-        optimistic: () => {
-          applyNoteDelete(id);
-          return { ok: true, data: null, error: null };
-        },
-      }),
+  ia: {
+    chat: async () => fail<any>('IA no disponible'),
+    status: async () => fail<any>('IA no disponible'),
+  },
+
+  assistant: {
+    message: async () => fail<any>('Asistente no disponible'),
+    confirm: async () => fail<any>('Asistente no disponible'),
+    cancel: async () => fail<any>('Asistente no disponible'),
   },
 
   admin: {
-    stats: () => request<AdminStats>('/api/v1/admin/stats'),
-    wellbeing: () => request<AdminWellbeing>('/api/v1/admin/wellbeing'),
-    users: () => request<AdminUser[]>('/api/v1/admin/users'),
-    topUsers: (limit = 8) => request<AdminTopUser[]>(`/api/v1/admin/users/top?limit=${limit}`),
-    toggleRole: (id: number) =>
-      request<{ id: number; rol: string }>(`/api/v1/admin/users/${id}/role`, {
-        method: 'PATCH',
-        body: '{}',
-      }),
-    deleteUser: (id: number) =>
-      request<{ ok: boolean }>(`/api/v1/admin/users/${id}`, { method: 'DELETE' }),
-    announcements: () =>
-      request<{ activos: AdminAnnouncement[]; archivados: AdminAnnouncement[] }>(
-        '/api/v1/admin/announcements',
-      ),
-    createAnnouncement: (payload: { titulo: string; descripcion: string; fechaLimite: string }) =>
-      request<AdminAnnouncement>('/api/v1/admin/announcements', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      }),
-    archiveAnnouncement: (id: number) =>
-      request<AdminAnnouncement>(`/api/v1/admin/announcements/${id}/archive`, {
-        method: 'POST',
-        body: '{}',
-      }),
-    restoreAnnouncement: (id: number) =>
-      request<AdminAnnouncement>(`/api/v1/admin/announcements/${id}/restore`, {
-        method: 'POST',
-        body: '{}',
-      }),
-    deleteAnnouncement: (id: number) =>
-      request<{ ok: boolean }>(`/api/v1/admin/announcements/${id}`, { method: 'DELETE' }),
-    analytics: (path: string, query = '') =>
-      request<Record<string, unknown>>(`/api/v1/admin/analytics/${path}${query}`),
-  },
-
-  bienestar: {
-    stats: () => legacyJson<WellbeingStats>('/api/bienestar/estadisticas'),
-    stress: (fecha?: string) => {
-      const qs = fecha ? `?fecha=${encodeURIComponent(fecha)}` : '';
-      return legacyJson<StressReport>(`/api/bienestar/estres${qs}`);
-    },
-    savePomodoro: (duracion: number) =>
-      queuedLegacyMutation(
-        'wellbeing.pomodoro',
-        'Registrar sesión Pomodoro',
-        '/api/bienestar/pomodoro',
-        { duracion },
-        () => applyWellbeingRecord('POMODORO', duracion),
-      ),
-    savePause: (tipo: string, duracion: number) =>
-      queuedLegacyMutation(
-        'wellbeing.pause',
-        'Registrar pausa',
-        '/api/bienestar/pausa',
-        { tipo, duracion },
-        () => applyWellbeingRecord('PAUSA', duracion, tipo),
-      ),
+    stats: async () => fail<AdminStats>('Admin no disponible'),
+    wellbeing: async () => fail<AdminWellbeing>('Admin no disponible'),
+    users: async () => fail<AdminUser[]>('Admin no disponible'),
+    announcements: async () => fail<AdminAnnouncement[]>('Admin no disponible'),
+    toggleRole: async () => fail<AdminUser>('Admin no disponible'),
+    deleteUser: async () => fail<void>('Admin no disponible'),
+    createAnnouncement: async () => fail<AdminAnnouncement>('Admin no disponible'),
+    archiveAnnouncement: async () => fail<AdminAnnouncement>('Admin no disponible'),
+    restoreAnnouncement: async () => fail<AdminAnnouncement>('Admin no disponible'),
+    deleteAnnouncement: async () => fail<void>('Admin no disponible'),
   },
 };

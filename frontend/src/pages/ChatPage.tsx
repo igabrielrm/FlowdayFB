@@ -24,17 +24,21 @@ import SendRoundedIcon from '@mui/icons-material/SendRounded';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import { Client, IMessage } from '@stomp/stompjs';
-import SockJS from 'sockjs-client';
-import { api, UsuarioDto } from '../api/client';
 import PageHeader from '../components/mui/PageHeader';
 import PageStack from '../components/mui/PageStack';
 import { glassSurface } from '../theme/glass';
-import type { ChatMessage, Conversation } from '../types/chat';
 import { userInitials } from '../types/community';
-import { notifyChatUnreadChanged } from '../events';
-import { websocketUrl } from '../platform';
-import { nativeAuthHeaders } from '../auth/nativeAuth';
+import { getFriends, subscribeToFriends, type FriendUser } from '../firebase/community';
+import {
+  sendMessage,
+  getConversations,
+  getMessages,
+  subscribeToMessages,
+  markMessagesAsRead,
+  deleteConversation,
+  type ChatMessage,
+  type ConversationData,
+} from '../firebase/chat';
 
 function formatMessageTime(fecha?: string | null) {
   if (!fecha) return '';
@@ -47,156 +51,103 @@ export default function ChatPage() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedId = Number(searchParams.get('user')) || null;
-  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const selectedId = searchParams.get('user') || null;
+  const [friends, setFriends] = useState<FriendUser[]>([]);
+  const [conversations, setConversations] = useState<ConversationData[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [typingFrom, setTypingFrom] = useState<number | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const selectedIdRef = useRef(selectedId);
-  const stompRef = useRef<Client | null>(null);
-  const typingTimerRef = useRef<number | null>(null);
-  selectedIdRef.current = selectedId;
 
-  const appendMessage = useCallback((msg: ChatMessage) => {
-    setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+  // Load friends list
+  useEffect(() => {
+    getFriends().then(setFriends).catch(() => setError('Error al cargar amigos'));
   }, []);
 
+  // Subscribe to friends list changes
+  useEffect(() => {
+    const unsubs = subscribeToFriends(
+      (friendList) => setFriends(friendList),
+      (err) => setError('Error al cargar amigos: ' + err.message),
+    );
+    return () => unsubs.forEach((u) => u());
+  }, []);
+
+  // Load conversations
   const loadConversations = useCallback(async () => {
-    const res = await api.chat.conversations();
-    if (res.ok && res.data) setConversations(res.data);
-  }, []);
+    if (friends.length === 0) return;
+    try {
+      const convs = await getConversations(friends);
+      setConversations(convs);
+    } catch {
+      // Silently fail
+    }
+  }, [friends]);
 
   useEffect(() => {
-    loadConversations().finally(() => setLoading(false));
-  }, [loadConversations]);
+    if (friends.length > 0) {
+      loadConversations().finally(() => setLoading(false));
+    }
+  }, [friends, loadConversations]);
 
+  // Subscribe to messages for selected user
   useEffect(() => {
     if (!selectedId) {
       setMessages([]);
       return;
     }
+
     setError(null);
-    api.chat.messages(selectedId).then((res) => {
-      if (!res.ok) {
-        setError(res.error || 'No se pudo cargar la conversación');
-        setMessages([]);
-        return;
-      }
-      if (res.data) setMessages(res.data);
-    });
-    api.chat.markRead(selectedId).then(() => {
-      loadConversations();
-      notifyChatUnreadChanged();
-    });
+    const unsub = subscribeToMessages(
+      selectedId,
+      (msgs) => setMessages(msgs),
+      (err) => setError('Error al cargar mensajes: ' + err.message),
+    );
+
+    // Mark messages as read
+    markMessagesAsRead(selectedId).then(() => loadConversations());
+
+    return () => unsub();
   }, [loadConversations, selectedId]);
 
+  // Scroll to bottom on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  useEffect(() => {
-    const client = new Client({
-      webSocketFactory: () => new SockJS(websocketUrl('/ws')) as unknown as WebSocket,
-      reconnectDelay: 5000,
-      debug: () => {},
-      beforeConnect: async () => {
-        client.connectHeaders = await nativeAuthHeaders();
-      },
-      onConnect: () => {
-        client.subscribe('/user/queue/chat', (message: IMessage) => {
-          try {
-            const payload = JSON.parse(message.body) as ChatMessage;
-            const activeId = selectedIdRef.current;
-            if (activeId) {
-              const involvesActive =
-                payload.remitenteId === activeId || payload.destinatarioId === activeId;
-              if (involvesActive) {
-                appendMessage({
-                  ...payload,
-                  propio: payload.remitenteId !== activeId,
-                });
-                api.chat.markRead(activeId);
-              }
-            }
-            loadConversations();
-            notifyChatUnreadChanged();
-          } catch {
-            /* ignore */
-          }
-        });
-        client.subscribe('/user/queue/chat-typing', (message: IMessage) => {
-          try {
-            const payload = JSON.parse(message.body) as { fromUserId: number; typing: boolean };
-            if (payload.fromUserId === selectedIdRef.current) {
-              setTypingFrom(payload.typing ? payload.fromUserId : null);
-            }
-          } catch {
-            /* ignore */
-          }
-        });
-      },
-    });
-    stompRef.current = client;
-    client.activate();
-    return () => {
-      client.deactivate();
-      stompRef.current = null;
-    };
-  }, [appendMessage, loadConversations]);
-
-  const selectedUser: UsuarioDto | undefined = conversations.find(
-    (c) => c.user.id === selectedId,
-  )?.user;
+  const selectedUser: FriendUser | undefined = friends.find(
+    (f) => f.uid === selectedId,
+  );
 
   async function send(e: FormEvent) {
     e.preventDefault();
     if (!selectedId || !text.trim()) return;
     setSending(true);
     setError(null);
-    const res = await api.chat.send(selectedId, text.trim());
-    if (!res.ok || !res.data) {
-      setError(res.error || 'No se pudo enviar');
+    const msg = await sendMessage(selectedId, text.trim());
+    if (!msg) {
+      setError('No se pudo enviar el mensaje');
     } else {
-      appendMessage(res.data!);
       setText('');
       loadConversations();
     }
     setSending(false);
   }
 
-  function onTextChange(value: string) {
-    setText(value);
-    if (!selectedId || !stompRef.current?.connected) return;
-    stompRef.current.publish({
-      destination: '/app/chat/typing',
-      body: JSON.stringify({ destinatarioId: selectedId, typing: value.length > 0 }),
-    });
-    if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
-    typingTimerRef.current = window.setTimeout(() => {
-      stompRef.current?.publish({
-        destination: '/app/chat/typing',
-        body: JSON.stringify({ destinatarioId: selectedId, typing: false }),
-      });
-    }, 1200);
-  }
-
-  async function deleteConversation() {
+  async function handleDeleteConversation() {
     if (!selectedId) return;
     setMenuAnchor(null);
-    const res = await api.chat.deleteConversation(selectedId);
-    if (!res.ok) {
-      setError(res.error || 'No se pudo eliminar el chat');
+    const success = await deleteConversation(selectedId);
+    if (!success) {
+      setError('No se pudo eliminar el chat');
       return;
     }
     setMessages([]);
     setSearchParams({});
     await loadConversations();
-    notifyChatUnreadChanged();
   }
 
   const showSidebar = !isMobile || !selectedId;
@@ -244,9 +195,9 @@ export default function ChatPage() {
                 <List disablePadding>
                   {conversations.map((c) => (
                     <ListItemButton
-                      key={c.user.id}
-                      selected={selectedId === c.user.id}
-                      onClick={() => setSearchParams({ user: String(c.user.id) })}
+                      key={c.user.uid}
+                      selected={selectedId === c.user.uid}
+                      onClick={() => setSearchParams({ user: c.user.uid })}
                       sx={{ py: 1.5, px: 2.5 }}
                     >
                       <Badge badgeContent={c.noLeidos || undefined} color="error" sx={{ mr: 1.5 }}>
@@ -323,7 +274,7 @@ export default function ChatPage() {
                         {selectedUser.nombre}
                       </Typography>
                       <Typography variant="caption" color="text.secondary" noWrap display="block">
-                        {typingFrom === selectedId ? 'Escribiendo…' : selectedUser.correo}
+                        {selectedUser.correo}
                       </Typography>
                     </Box>
                   </Stack>
@@ -342,7 +293,7 @@ export default function ChatPage() {
                 </Stack>
 
                 <Menu anchorEl={menuAnchor} open={!!menuAnchor} onClose={() => setMenuAnchor(null)}>
-                  <MenuItem onClick={deleteConversation}>
+                  <MenuItem onClick={handleDeleteConversation}>
                     <DeleteOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
                     Eliminar conversación
                   </MenuItem>
@@ -414,7 +365,7 @@ export default function ChatPage() {
                   <Stack direction="row" spacing={1} alignItems="flex-end">
                     <TextField
                       value={text}
-                      onChange={(e) => onTextChange(e.target.value)}
+                      onChange={(e) => setText(e.target.value)}
                       placeholder="Escribe un mensaje…"
                       fullWidth
                       size="small"

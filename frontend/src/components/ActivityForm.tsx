@@ -19,7 +19,9 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { api, UsuarioDto } from '../api/client';
+import { type UsuarioDto } from '../api/client';
+import { api } from '../api/client';
+import { getFriends, type FriendUser } from '../firebase/community';
 import {
   ACTIVITY_STATES,
   ACTIVITY_TYPES,

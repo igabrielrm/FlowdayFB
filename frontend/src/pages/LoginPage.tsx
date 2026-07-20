@@ -11,45 +11,15 @@ import {
   Typography,
 } from '@mui/material';
 import { useAuth } from '../auth/AuthContext';
-import { api } from '../api/client';
 import AuthShell from '../components/mui/AuthShell';
-import { Browser } from '@capacitor/browser';
-import { isNative } from '../platform';
-import { nativeOAuthStartUrl } from '../auth/nativeAuth';
 
 export default function LoginPage() {
-  const { user, login } = useAuth();
+  const { user, login, loginWithGoogle, continueAsGuest } = useAuth();
   const [searchParams] = useSearchParams();
   const [correo, setCorreo] = useState('');
   const [contrasena, setContrasena] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [backendWarning, setBackendWarning] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [oauthProviders, setOauthProviders] = useState<string[]>([]);
-
-  useEffect(() => {
-    const oauthError = searchParams.get('error');
-    if (oauthError === 'oauth_email') {
-      setError('No se pudo obtener el correo del proveedor OAuth.');
-    } else if (oauthError === 'oauth_denied') {
-      setError(searchParams.get('msg') || 'Acceso OAuth denegado.');
-    } else if (oauthError === '1') {
-      setError('Correo o contraseña incorrectos.');
-    } else if (oauthError === 'oauth_exchange') {
-      setError('No se pudo completar el acceso móvil. Inténtalo nuevamente.');
-    }
-  }, [searchParams]);
-
-  useEffect(() => {
-    api.oauthProviders().then((res) => {
-      if (res.ok && res.data) setOauthProviders(res.data);
-    });
-    if (isNative && navigator.onLine) {
-      api.mobileCompatibility().then((res) => {
-        if (!res.ok) setBackendWarning(res.error);
-      });
-    }
-  }, []);
 
   if (user) return <Navigate to="/" replace />;
 
@@ -62,15 +32,20 @@ export default function LoginPage() {
     setSubmitting(false);
   }
 
-  async function oauthLogin(provider: string) {
-    if (isNative) {
-      await Browser.open({
-        url: await nativeOAuthStartUrl(provider),
-        presentationStyle: 'popover',
-      });
-      return;
-    }
-    window.location.href = `/oauth2/authorization/${provider}`;
+  async function handleGoogleLogin() {
+    setSubmitting(true);
+    setError(null);
+    const err = await loginWithGoogle();
+    if (err) setError(err);
+    setSubmitting(false);
+  }
+
+  async function handleGuestAccess() {
+    setSubmitting(true);
+    setError(null);
+    const err = await continueAsGuest();
+    if (err) setError(err);
+    setSubmitting(false);
   }
 
   return (
@@ -86,7 +61,6 @@ export default function LoginPage() {
         </Box>
 
         {error && <Alert severity="error">{error}</Alert>}
-        {backendWarning && <Alert severity="warning">{backendWarning}</Alert>}
 
         <TextField
           label="Correo"
@@ -102,7 +76,6 @@ export default function LoginPage() {
           value={contrasena}
           onChange={(e) => setContrasena(e.target.value)}
           required
-          inputProps={{ minLength: 8 }}
           autoComplete="current-password"
         />
 
@@ -110,23 +83,15 @@ export default function LoginPage() {
           {submitting ? 'Entrando…' : 'Iniciar sesión'}
         </Button>
 
-        {oauthProviders.length > 0 && (
-          <>
-            <Divider>o continúa con</Divider>
-            <Stack spacing={1}>
-              {oauthProviders.includes('google') && (
-                <Button variant="outlined" onClick={() => oauthLogin('google')}>
-                  Continuar con Google
-                </Button>
-              )}
-              {oauthProviders.includes('microsoft') && (
-                <Button variant="outlined" onClick={() => oauthLogin('microsoft')}>
-                  Continuar con Microsoft
-                </Button>
-              )}
-            </Stack>
-          </>
-        )}
+        <Divider>o continúa con</Divider>
+        <Stack spacing={1}>
+          <Button variant="outlined" onClick={handleGoogleLogin} disabled={submitting}>
+            Continuar con Google
+          </Button>
+          <Button variant="text" onClick={handleGuestAccess} disabled={submitting}>
+            Continuar como invitado
+          </Button>
+        </Stack>
 
         <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
           ¿No tienes cuenta?{' '}

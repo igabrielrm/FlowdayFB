@@ -1,4 +1,3 @@
-import { Link as RouterLink } from 'react-router-dom';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -13,44 +12,51 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { api } from '../api/client';
 import PageHeader from '../components/mui/PageHeader';
 import PageStack from '../components/mui/PageStack';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import type { CommunityUser } from '../types/community';
 import { userInitials } from '../types/community';
 import { assetUrl } from '../platform';
+import {
+  searchUsers,
+  sendFriendRequest,
+  acceptFriendRequest,
+  rejectFriendRequest,
+  cancelFriendRequest,
+  removeFriend,
+  subscribeToFriendRequests,
+  subscribeToFriends,
+  type FriendUser,
+} from '../firebase/community';
+import type { Unsubscribe } from 'firebase/firestore';
 
 function RelationActions({
   item,
   busyId,
   onAction,
 }: {
-  item: CommunityUser;
-  busyId: number | null;
-  onAction: (action: string, userId: number, conexionId?: number | null) => void;
+  item: FriendUser;
+  busyId: string | null;
+  onAction: (action: string, userId: string, conexionId?: string | null) => void;
 }) {
-  const { user, estadoRelacion, conexionId } = item;
+  const { uid, status, conexionId } = item;
 
-  if (estadoRelacion === 'CONECTADO') {
+  if (status === 'accepted') {
     return (
       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
         <Chip label="Conectado" color="success" size="small" />
-        <Button size="small" component={RouterLink} to={`/chat?user=${user.id}`}>
-          Chat
-        </Button>
       </Stack>
     );
   }
-  if (estadoRelacion === 'SOLICITUD_ENVIADA') {
+  if (status === 'pending_sent') {
     return (
       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
         <Chip label="Solicitud enviada" color="info" size="small" />
         {conexionId && (
           <Button
             size="small"
-            disabled={busyId === user.id}
-            onClick={() => onAction('cancel', user.id, conexionId)}
+            disabled={busyId === uid}
+            onClick={() => onAction('cancel', uid, conexionId)}
           >
             Cancelar
           </Button>
@@ -58,21 +64,21 @@ function RelationActions({
       </Stack>
     );
   }
-  if (estadoRelacion === 'SOLICITUD_RECIBIDA' && conexionId) {
+  if (status === 'pending_received' && conexionId) {
     return (
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
         <Button
           size="small"
           variant="contained"
-          disabled={busyId === user.id}
-          onClick={() => onAction('accept', user.id, conexionId)}
+          disabled={busyId === uid}
+          onClick={() => onAction('accept', uid, conexionId)}
         >
           Aceptar
         </Button>
         <Button
           size="small"
-          disabled={busyId === user.id}
-          onClick={() => onAction('reject', user.id, conexionId)}
+          disabled={busyId === uid}
+          onClick={() => onAction('reject', uid, conexionId)}
         >
           Rechazar
         </Button>
@@ -83,10 +89,10 @@ function RelationActions({
     <Button
       size="small"
       variant="contained"
-      disabled={busyId === user.id}
-      onClick={() => onAction('request', user.id)}
+      disabled={busyId === uid}
+      onClick={() => onAction('request', uid)}
     >
-      {busyId === user.id ? 'Enviando…' : 'Solicitar amistad'}
+      {busyId === uid ? 'Enviando…' : 'Solicitar amistad'}
     </Button>
   );
 }
@@ -96,27 +102,27 @@ function UserRow({
   busyId,
   onAction,
 }: {
-  item: CommunityUser;
-  busyId: number | null;
-  onAction: (action: string, userId: number, conexionId?: number | null) => void;
+  item: FriendUser;
+  busyId: string | null;
+  onAction: (action: string, userId: string, conexionId?: string | null) => void;
 }) {
-  const { user } = item;
+  const { uid, nombre, correo, foto } = item;
 
   return (
     <Card variant="outlined">
       <CardContent>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }}>
-          {user.foto ? (
-            <Avatar src={assetUrl(user.foto)} alt="" sx={{ width: 48, height: 48 }} />
+          {foto ? (
+            <Avatar src={assetUrl(foto)} alt="" sx={{ width: 48, height: 48 }} />
           ) : (
-            <Avatar sx={{ width: 48, height: 48 }}>{userInitials(user.nombre)}</Avatar>
+            <Avatar sx={{ width: 48, height: 48 }}>{userInitials(nombre)}</Avatar>
           )}
           <Box flex={1} minWidth={0}>
             <Typography fontWeight={700} color="text.primary" noWrap>
-              {user.nombre}
+              {nombre}
             </Typography>
             <Typography variant="body2" color="text.secondary" noWrap>
-              {user.correo}
+              {correo}
             </Typography>
           </Box>
           <Box>
@@ -129,19 +135,48 @@ function UserRow({
 }
 
 export default function CommunityPage() {
-  const [users, setUsers] = useState<CommunityUser[]>([]);
+  const [users, setUsers] = useState<FriendUser[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<FriendUser[]>([]);
+  const [friends, setFriends] = useState<FriendUser[]>([]);
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Real-time subscription for pending requests
+  useEffect(() => {
+    const unsub = subscribeToFriendRequests(
+      (requests) => setPendingRequests(requests),
+      (err) => setError('Error al cargar solicitudes: ' + err.message),
+    );
+    return () => unsub();
+  }, []);
+
+  // Real-time subscription for friends list
+  useEffect(() => {
+    const unsubs = subscribeToFriends(
+      (friendList) => {
+        setFriends(friendList);
+        setLoading(false);
+      },
+      (err) => {
+        setError('Error al cargar amigos: ' + err.message);
+        setLoading(false);
+      },
+    );
+    return () => unsubs.forEach((u) => u());
+  }, []);
 
   const load = useCallback(async (q?: string) => {
     setLoading(true);
     setError(null);
-    const usersRes = await api.community.users(q);
-    if (usersRes.ok && usersRes.data) setUsers(usersRes.data);
-    else setError(usersRes.error || 'No se pudieron cargar los usuarios');
+    try {
+      const results = await searchUsers(q || '');
+      setUsers(results);
+    } catch (err) {
+      setError('No se pudieron cargar los usuarios');
+    }
     setLoading(false);
   }, []);
 
@@ -149,25 +184,34 @@ export default function CommunityPage() {
     load(debouncedQuery.trim() || undefined);
   }, [debouncedQuery, load]);
 
-  const filteredUsers = useMemo(() => users, [users]);
+  // Merge friends into the users list for display
+  const mergedUsers = useMemo(() => {
+    if (!query.trim()) return [];
+    return users.map((u) => {
+      const friend = friends.find((f) => f.uid === u.uid);
+      const pending = pendingRequests.find((p) => p.uid === u.uid);
+      if (friend) return { ...u, status: friend.status, conexionId: friend.conexionId };
+      if (pending) return { ...u, status: pending.status, conexionId: pending.conexionId };
+      return u;
+    });
+  }, [users, friends, pendingRequests, query]);
 
-  const pendingRequests = useMemo(
-    () => users.filter((u) => u.estadoRelacion === 'SOLICITUD_RECIBIDA'),
-    [users],
-  );
-
-  async function handleAction(action: string, userId: number, conexionId?: number | null) {
+  async function handleAction(action: string, userId: string, conexionId?: string | null) {
     setBusyId(userId);
     setError(null);
-    let res;
-    if (action === 'request') res = await api.community.connect(userId);
-    else if (action === 'accept' && conexionId) res = await api.community.accept(conexionId);
-    else if (action === 'reject' && conexionId) res = await api.community.reject(conexionId);
-    else if (action === 'cancel' && conexionId) res = await api.community.removeConnection(conexionId);
-    else res = { ok: false, error: 'Acción no válida' };
+    let res: string | null;
+    try {
+      if (action === 'request') res = await sendFriendRequest(userId);
+      else if (action === 'accept' && conexionId) res = await acceptFriendRequest(conexionId);
+      else if (action === 'reject' && conexionId) res = await rejectFriendRequest(conexionId);
+      else if (action === 'cancel' && conexionId) res = await cancelFriendRequest(conexionId);
+      else res = 'Acción no válida';
 
-    if (!res?.ok) setError(res?.error || 'No se pudo completar la acción');
-    else await load(debouncedQuery.trim() || undefined);
+      if (res) setError(res);
+      else if (debouncedQuery.trim()) await load(debouncedQuery.trim() || undefined);
+    } catch (err) {
+      setError('No se pudo completar la acción');
+    }
     setBusyId(null);
   }
 
@@ -188,7 +232,7 @@ export default function CommunityPage() {
             </Typography>
             <Stack spacing={2}>
               {pendingRequests.map((item) => (
-                <UserRow key={item.user.id} item={item} busyId={busyId} onAction={handleAction} />
+                <UserRow key={item.uid} item={item} busyId={busyId} onAction={handleAction} />
               ))}
             </Stack>
           </CardContent>
@@ -213,15 +257,15 @@ export default function CommunityPage() {
             <Stack alignItems="center" py={3}>
               <CircularProgress size={28} />
             </Stack>
-          ) : filteredUsers.length === 0 ? (
-            <Typography color="text.secondary">No hay usuarios para mostrar.</Typography>
-          ) : (
+          ) : mergedUsers.length === 0 && query.trim() ? (
+            <Typography color="text.secondary">No se encontraron usuarios.</Typography>
+          ) : query.trim() ? (
             <Stack spacing={2}>
-              {filteredUsers.map((item) => (
-                <UserRow key={item.user.id} item={item} busyId={busyId} onAction={handleAction} />
+              {mergedUsers.map((item) => (
+                <UserRow key={item.uid} item={item} busyId={busyId} onAction={handleAction} />
               ))}
             </Stack>
-          )}
+          ) : null}
         </CardContent>
       </Card>
     </PageStack>

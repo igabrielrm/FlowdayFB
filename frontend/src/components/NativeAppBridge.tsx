@@ -3,19 +3,17 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { isNative } from '../platform';
-import { exchangeNativeOAuthCode } from '../auth/nativeAuth';
 import { useAuth } from '../auth/AuthContext';
 import { THEME_EVENT } from '../theme/MuiThemeProvider';
 
 function applyStatusBarForTheme() {
   const dark = document.documentElement.dataset.theme === 'dark';
-  // Capacitor: Style.Dark = light icons (dark bg); Style.Light = dark icons (light bg).
   StatusBar.setStyle({ style: dark ? Style.Dark : Style.Light }).catch(() => undefined);
   StatusBar.setBackgroundColor({ color: '#00000000' }).catch(() => undefined);
 }
 
 export default function NativeAppBridge() {
-  const { refresh } = useAuth();
+  const { user } = useAuth();
 
   useEffect(() => {
     if (!isNative) return;
@@ -38,24 +36,6 @@ export default function NativeAppBridge() {
     const urlListener = CapacitorApp.addListener('appUrlOpen', async ({ url }) => {
       try {
         const parsed = new URL(url);
-        const code = parsed.searchParams.get('code');
-        if (code) {
-          const exchanged = await exchangeNativeOAuthCode(code);
-          await Browser.close().catch(() => undefined);
-          if (exchanged) {
-            await refresh();
-            window.location.hash = '/';
-          } else {
-            window.location.hash = '/login?error=oauth_exchange';
-          }
-          return;
-        }
-        const error = parsed.searchParams.get('error');
-        if (error) {
-          await Browser.close().catch(() => undefined);
-          window.location.hash = `/login?error=${encodeURIComponent(error)}`;
-          return;
-        }
         const route = parsed.searchParams.get('route');
         if (route?.startsWith('/')) {
           window.location.hash = route;
@@ -70,7 +50,8 @@ export default function NativeAppBridge() {
       backListener.then((listener) => listener.remove());
       urlListener.then((listener) => listener.remove());
     };
-  }, [refresh]);
+  }, [user, isNative]);
 
   return null;
 }
+

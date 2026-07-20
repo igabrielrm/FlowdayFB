@@ -28,22 +28,6 @@ export default defineConfig(({ mode }) => {
       hmr: {
         path: '/app/',
       },
-      proxy: {
-        '/api': 'http://localhost:8080',
-        '/manifest.json': 'http://localhost:8080',
-        '/sw.js': 'http://localhost:8080',
-        '/images': 'http://localhost:8080',
-        '/ws': {
-          target: 'http://localhost:8080',
-          ws: true,
-          changeOrigin: true,
-        },
-        '/uploads': 'http://localhost:8080',
-        '/oauth2': 'http://localhost:8080',
-        '/login/oauth2': 'http://localhost:8080',
-        '/internal': 'http://localhost:8080',
-        '/admin': 'http://localhost:8080',
-      },
     },
     optimizeDeps: {
       include: ['react', 'react-dom', '@emotion/react', '@emotion/styled', '@mui/material', 'sockjs-client'],
