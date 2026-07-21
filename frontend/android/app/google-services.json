@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "371209142626",
+    "project_id": "flow-day-7f53e",
+    "storage_bucket": "flow-day-7f53e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:371209142626:android:565085144c0df452906c3b",
+        "android_client_info": {
+          "package_name": "com.uce.flowday"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "371209142626-kljggqoh1kdum642s1r8a6fvu9sp1cg8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCLZlkzYRvlsmqegNPVPXd_oShGFsWWuTc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "371209142626-kljggqoh1kdum642s1r8a6fvu9sp1cg8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

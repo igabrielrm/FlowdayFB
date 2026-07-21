@@ -12,13 +12,13 @@
   "categories": ["productivity", "lifestyle"],
   "icons": [
     {
-      "src": "/images/flowday-logo.svg",
+      "src": "/app/images/flowday-logo.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "/images/flowday-logo.svg",
+      "src": "/app/images/flowday-logo.svg",
       "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "maskable"
