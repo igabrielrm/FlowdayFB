@@ -23,11 +23,12 @@ import {
   collection,
   deleteDoc,
   doc,
-  enableIndexedDbPersistence,
   getDoc,
   getDocs,
-  getFirestore,
+  initializeFirestore,
   orderBy,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   query,
   serverTimestamp,
   setDoc,
@@ -65,7 +66,11 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const firestore = getFirestore(app);
+const firestore = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager(),
+  }),
+});
 
 let persistenceEnabled = false;
 
@@ -100,9 +105,8 @@ export const firebaseClient = {
     if (persistenceEnabled) return;
     try {
       await setPersistence(auth, browserLocalPersistence);
-      await enableIndexedDbPersistence(firestore, { synchronizeTabs: true });
     } catch {
-      // Firestore persistence is best-effort.
+      // Auth persistence is best-effort.
     }
     persistenceEnabled = true;
   },

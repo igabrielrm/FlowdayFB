@@ -15,7 +15,7 @@ import {
   useTheme,
 } from '@mui/material';
 import { api } from '../api/client';
-import { ASSISTANT_ACTION_EVENT, OFFLINE_QUEUE_EVENT } from '../events';
+import { OFFLINE_QUEUE_EVENT } from '../events';
 import { isTempEntityId, readApiGet } from '../offline/cache';
 import ActivityDetailModal from '../components/ActivityDetailModal';
 import PageHeader from '../components/mui/PageHeader';
@@ -92,11 +92,8 @@ export default function ActivitiesPage() {
   useEffect(() => {
     const onQueue = () => load();
     window.addEventListener(OFFLINE_QUEUE_EVENT, onQueue);
-    window.addEventListener(ASSISTANT_ACTION_EVENT, onQueue);
     return () => {
-      window.removeEventListener(OFFLINE_QUEUE_EVENT, onQueue);
-      window.removeEventListener(ASSISTANT_ACTION_EVENT, onQueue);
-    };
+      window.removeEventListener(OFFLINE_QUEUE_EVENT, onQueue);    };
   }, [load]);
 
   useEffect(() => {

@@ -33,7 +33,8 @@ import type { RecurrenceConfig, RecurrenceKind } from '../utils/recurrence';
 
 function NoteCard({ note, onClick }: { note: Note; onClick: (n: Note) => void }) {
   const colorDef = NOTE_COLORS.find((c) => c.value === note.color);
-  const bg = colorDef?.bgLight ?? '#fff';
+  const bg = colorDef?.bgLight ?? '#f8fafc';
+  const textColor = '#0f172a';
 
   return (
     <Paper
@@ -45,7 +46,7 @@ function NoteCard({ note, onClick }: { note: Note; onClick: (n: Note) => void })
         cursor: 'pointer',
         bgcolor: bg,
         border: '1.5px solid',
-        borderColor: 'divider',
+        borderColor: bg === '#ffffff' || bg === '#f8fafc' ? '#e2e8f0' : 'transparent',
         transition: 'all 0.18s ease',
         minHeight: 100,
         position: 'relative',
@@ -64,7 +65,8 @@ function NoteCard({ note, onClick }: { note: Note; onClick: (n: Note) => void })
             top: 8,
             right: 8,
             fontSize: 18,
-            color: 'text.secondary',
+            color: textColor,
+            opacity: 0.6,
             transform: 'rotate(45deg)',
           }}
         />
@@ -73,15 +75,16 @@ function NoteCard({ note, onClick }: { note: Note; onClick: (n: Note) => void })
         <Typography
           variant="subtitle2"
           fontWeight={700}
-          sx={{ mb: 0.5, pr: note.pinned ? 3 : 0, lineHeight: 1.4 }}
+          sx={{ mb: 0.5, pr: note.pinned ? 3 : 0, lineHeight: 1.4, color: textColor }}
         >
           {note.titulo}
         </Typography>
       )}
       <Typography
         variant="body2"
-        color="text.secondary"
         sx={{
+          color: textColor,
+          opacity: 0.8,
           display: '-webkit-box',
           WebkitLineClamp: 6,
           WebkitBoxOrient: 'vertical',
@@ -112,7 +115,7 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
             borderRadius: '50%',
             bgcolor: c.bgLight,
             border: '2px solid',
-            borderColor: c.value === value ? 'primary.main' : 'divider',
+            borderColor: c.value === value ? 'primary.main' : c.bgLight === '#ffffff' ? '#cbd5e1' : 'transparent',
             cursor: 'pointer',
             transition: 'transform 0.12s',
             '&:hover': { transform: 'scale(1.2)' },
@@ -149,7 +152,7 @@ function NoteEditorDialog({
   const dirty = useRef(false);
 
   const colorDef = NOTE_COLORS.find((c) => c.value === color);
-  const bg = colorDef?.bgLight ?? '#fff';
+  const bg = colorDef?.bgLight ?? '#f8fafc';
 
   useEffect(() => {
     dirty.current = false;

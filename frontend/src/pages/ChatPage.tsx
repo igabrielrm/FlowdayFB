@@ -1,10 +1,11 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import {
   Alert,
   Avatar,
   Badge,
   Box,
+  Button,
   Card,
   CircularProgress,
   Divider,
@@ -29,6 +30,7 @@ import PageStack from '../components/mui/PageStack';
 import { glassSurface } from '../theme/glass';
 import { userInitials } from '../types/community';
 import { getFriends, subscribeToFriends, type FriendUser } from '../firebase/community';
+import { useAuth } from '../auth/AuthContext';
 import {
   sendMessage,
   getConversations,
@@ -50,6 +52,7 @@ function formatMessageTime(fecha?: string | null) {
 export default function ChatPage() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const { loading: authLoading, user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedId = searchParams.get('user') || null;
   const [friends, setFriends] = useState<FriendUser[]>([]);
@@ -61,6 +64,35 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Show loading while auth is initializing
+  if (authLoading) {
+    return (
+      <PageStack sx={{ flex: 1, minHeight: 0 }}>
+        <PageHeader title="Mensajes" />
+        <Stack alignItems="center" justifyContent="center" flex={1}>
+          <CircularProgress />
+        </Stack>
+      </PageStack>
+    );
+  }
+
+  // Si no hay usuario logueado, mostrar mensaje
+  if (!user) {
+    return (
+      <PageStack sx={{ flex: 1, minHeight: 0 }}>
+        <PageHeader title="Mensajes" subtitle="Chat en tiempo real con tus conexiones" />
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, p: 4, textAlign: 'center' }}>
+          <Typography color="text.secondary" variant="h6" sx={{ mb: 2 }}>
+            Inicia sesión para acceder al Chat y conectar con la comunidad.
+          </Typography>
+          <Button component={RouterLink} to="/login" variant="outlined" sx={{ mt: 2 }}>
+            Iniciar Sesión
+          </Button>
+        </Box>
+      </PageStack>
+    );
+  }
 
   // Load friends list
   useEffect(() => {

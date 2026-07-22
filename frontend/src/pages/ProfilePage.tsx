@@ -42,7 +42,47 @@ import { useOfflineSync } from '../offline/useOfflineSync';
 
 export default function ProfilePage() {
   const theme = useTheme();
-  const { user, refresh } = useAuth();
+  const { user, refresh, loading: authLoading } = useAuth();
+
+  // Mostrar vista de invitado si no hay usuario o es anónimo
+  if (!authLoading && (!user || user.isAnonymous)) {
+    return (
+      <PageStack>
+        <PageHeader title="Mi Perfil" subtitle="Tu cuenta" />
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh', p: 3 }}>
+          <Card sx={{ maxWidth: 400, textAlign: 'center', p: 3, borderRadius: 3 }}>
+            <Avatar
+              sx={{
+                width: 72,
+                height: 72,
+                mx: 'auto',
+                mb: 2,
+                bgcolor: 'primary.main',
+                fontSize: '2rem',
+              }}
+            >
+              👤
+            </Avatar>
+            <Typography fontWeight="bold" gutterBottom variant="h5">
+              Modo Invitado
+            </Typography>
+            <Typography color="text.secondary" variant="body2" sx={{ mb: 3, maxWidth: 400, mx: 'auto' }}>
+              Estás usando la aplicación como invitado. Inicia sesión para guardar tu información, sincronizar en la nube y acceder a todas las funciones.
+            </Typography>
+            <Button
+              component={RouterLink}
+              to="/login"
+              size="large"
+              variant="contained"
+              sx={{ borderRadius: 2, px: 4 }}
+            >
+              Iniciar Sesión / Registrarse
+            </Button>
+          </Card>
+        </Box>
+      </PageStack>
+    );
+  }
   const fileRef = useRef<HTMLInputElement>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);

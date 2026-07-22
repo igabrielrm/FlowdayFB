@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Alert,
   Avatar,
@@ -15,6 +16,7 @@ import {
 import PageHeader from '../components/mui/PageHeader';
 import PageStack from '../components/mui/PageStack';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { useAuth } from '../auth/AuthContext';
 import { userInitials } from '../types/community';
 import { assetUrl } from '../platform';
 import {
@@ -39,7 +41,8 @@ function RelationActions({
   busyId: string | null;
   onAction: (action: string, userId: string, conexionId?: string | null) => void;
 }) {
-  const { uid, status, conexionId } = item;
+  const { uid, status, conexionId } = item as any;
+  const itemId = (item as any).id ?? uid;
 
   if (status === 'accepted') {
     return (
@@ -55,8 +58,8 @@ function RelationActions({
         {conexionId && (
           <Button
             size="small"
-            disabled={busyId === uid}
-            onClick={() => onAction('cancel', uid, conexionId)}
+            disabled={busyId === itemId}
+            onClick={() => onAction('cancel', itemId, conexionId)}
           >
             Cancelar
           </Button>
@@ -70,15 +73,15 @@ function RelationActions({
         <Button
           size="small"
           variant="contained"
-          disabled={busyId === uid}
-          onClick={() => onAction('accept', uid, conexionId)}
+          disabled={busyId === itemId}
+          onClick={() => onAction('accept', itemId, conexionId)}
         >
           Aceptar
         </Button>
         <Button
           size="small"
-          disabled={busyId === uid}
-          onClick={() => onAction('reject', uid, conexionId)}
+          disabled={busyId === itemId}
+          onClick={() => onAction('reject', itemId, conexionId)}
         >
           Rechazar
         </Button>
@@ -89,10 +92,10 @@ function RelationActions({
     <Button
       size="small"
       variant="contained"
-      disabled={busyId === uid}
-      onClick={() => onAction('request', uid)}
+      disabled={busyId === itemId}
+      onClick={() => onAction('request', itemId)}
     >
-      {busyId === uid ? 'Enviando…' : 'Solicitar amistad'}
+      {busyId === itemId ? 'Enviando…' : 'Solicitar amistad'}
     </Button>
   );
 }
@@ -106,7 +109,8 @@ function UserRow({
   busyId: string | null;
   onAction: (action: string, userId: string, conexionId?: string | null) => void;
 }) {
-  const { uid, nombre, correo, foto } = item;
+  const { nombre, correo, foto } = item;
+  const uid = String(item.id ?? (item as any).uid ?? '');
 
   return (
     <Card variant="outlined">
@@ -135,8 +139,27 @@ function UserRow({
 }
 
 export default function CommunityPage() {
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [users, setUsers] = useState<FriendUser[]>([]);
   const [pendingRequests, setPendingRequests] = useState<FriendUser[]>([]);
+
+  // Vista para usuarios no autenticados o invitados
+  if (!authLoading && (!user || user.isAnonymous)) {
+    return (
+      <PageStack>
+        <PageHeader title="Comunidad" subtitle="Conecta con otros estudiantes" />
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', p: 4, textAlign: 'center' }}>
+          <Typography color="text.secondary" gutterBottom variant="h6">
+            Inicia sesión para acceder a la Comunidad y conectar con otros estudiantes.
+          </Typography>
+          <Button onClick={() => navigate('/login')} variant="contained" sx={{ mt: 2, borderRadius: 2 }}>
+            Iniciar Sesión / Registrarse
+          </Button>
+        </Box>
+      </PageStack>
+    );
+  }
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query);
@@ -188,8 +211,9 @@ export default function CommunityPage() {
   const mergedUsers = useMemo(() => {
     if (!query.trim()) return [];
     return users.map((u) => {
-      const friend = friends.find((f) => f.uid === u.uid);
-      const pending = pendingRequests.find((p) => p.uid === u.uid);
+      const itemId = String(u.id);
+      const friend = friends.find((f) => String(f.id) === itemId);
+      const pending = pendingRequests.find((p) => String(p.id) === itemId);
       if (friend) return { ...u, status: friend.status, conexionId: friend.conexionId };
       if (pending) return { ...u, status: pending.status, conexionId: pending.conexionId };
       return u;
@@ -232,7 +256,7 @@ export default function CommunityPage() {
             </Typography>
             <Stack spacing={2}>
               {pendingRequests.map((item) => (
-                <UserRow key={item.uid} item={item} busyId={busyId} onAction={handleAction} />
+                <UserRow key={String(item.id)} item={item} busyId={busyId} onAction={handleAction} />
               ))}
             </Stack>
           </CardContent>
@@ -262,7 +286,7 @@ export default function CommunityPage() {
           ) : query.trim() ? (
             <Stack spacing={2}>
               {mergedUsers.map((item) => (
-                <UserRow key={item.uid} item={item} busyId={busyId} onAction={handleAction} />
+                <UserRow key={String(item.id)} item={item} busyId={busyId} onAction={handleAction} />
               ))}
             </Stack>
           ) : null}

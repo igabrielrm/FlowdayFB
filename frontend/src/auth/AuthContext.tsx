@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { firebaseClient, formatUser } from '../firebase/client';
 import * as firebaseData from '../firebase/data';
+import { saveUserProfile } from '../firebase/community';
 import { type UsuarioDto } from '../api/client';
 import { applyTheme } from '../types/profile';
 import { cacheSessionUser, clearSessionUser } from '../offline/cache';
@@ -51,6 +52,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Asegurar que el documento de usuario existe en Firestore
         if (formatted.correo || !authUser.isAnonymous) {
           await firebaseData.getProfile().catch(() => null);
+        }
+        // Guardar/actualizar usuario en la colección users para visibilidad en chat/comunidad
+        if (!authUser.isAnonymous) {
+          await saveUserProfile(authUser.uid, {
+            nombre: formatted.nombre,
+            correo: formatted.correo,
+            foto: formatted.foto,
+          }).catch(() => null);
         }
 
         setUser(userDto);

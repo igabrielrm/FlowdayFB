@@ -69,7 +69,7 @@ export default function RescheduleModal({ open, onClose, onDone }: Props) {
               <Select
                 labelId="reschedule-event-label"
                 label="Evento"
-                value={selectedId}
+                value={selectedId !== '' && !isNaN(Number(selectedId)) ? selectedId : ''}
                 onChange={(e) => setSelectedId(e.target.value ? Number(e.target.value) : '')}
               >
                 <MenuItem value="">Selecciona…</MenuItem>

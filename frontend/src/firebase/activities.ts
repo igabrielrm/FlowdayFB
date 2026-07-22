@@ -15,9 +15,18 @@ import {
   type DocumentData,
 } from 'firebase/firestore';
 import { firebaseClient } from './client';
+import { deepSanitizeForFirestore } from './data';
 import type { ActividadDetail, ActividadListItem } from '../types/activity';
 
-function currentUid() {
+// Función modificada para soportar modo invitado
+function currentUid(): string | null {
+  const user = firebaseClient.auth.currentUser;
+  if (!user) return null; // Modo invitado - no lanzar error
+  return user.uid;
+}
+
+// Función para obtener UID para operaciones que requieren usuario autenticado
+function requireAuthUid(): string {
   const user = firebaseClient.auth.currentUser;
   if (!user) throw new Error('No hay usuario autenticado');
   return user.uid;
@@ -55,21 +64,31 @@ function activityDocumentToDetail(id: string, data: any, uid: string): Actividad
 
 // ─── Own activities (existing behavior) ──────────────────────
 export async function listOwnActivities(uid: string): Promise<ActividadListItem[]> {
-  const snapshot = await getDocs(
-    query(
-      collection(firebaseClient.firestore, 'users', uid, 'activities'),
-      orderBy('fechaInicio', 'asc'),
-    ),
-  );
-  return snapshot.docs.map((docSnap) =>
-    activityDocumentToList(docSnap.id, docSnap.data(), uid),
-  );
+  try {
+    const snapshot = await getDocs(
+      query(
+        collection(firebaseClient.firestore, 'users', uid, 'activities'),
+        orderBy('fechaInicio', 'asc'),
+      ),
+    );
+    return snapshot.docs.map((docSnap) =>
+      activityDocumentToList(docSnap.id, docSnap.data(), uid),
+    );
+  } catch (error) {
+    console.error('Error al listar actividades:', error);
+    return [];
+  }
 }
 
 export async function getOwnActivity(uid: string, id: string): Promise<ActividadDetail | null> {
-  const snapshot = await getDoc(doc(firebaseClient.firestore, 'users', uid, 'activities', id));
-  if (!snapshot.exists()) return null;
-  return activityDocumentToDetail(snapshot.id, snapshot.data(), uid);
+  try {
+    const snapshot = await getDoc(doc(firebaseClient.firestore, 'users', uid, 'activities', id));
+    if (!snapshot.exists()) return null;
+    return activityDocumentToDetail(snapshot.id, snapshot.data(), uid);
+  } catch (error) {
+    console.error('Error al obtener actividad:', error);
+    return null;
+  }
 }
 
 // ─── Create activity with compartidoCon ─────────────────────
@@ -77,12 +96,17 @@ export async function createActivity(
   payload: Partial<ActividadDetail> & { compartidoCon?: string[] },
 ): Promise<ActividadDetail> {
   const uid = currentUid();
+  
+  // Modo invitado: almacenar en localStorage
+  if (!uid) {
+    return createActivityForGuest(payload);
+  }
   const activitiesRef = collection(firebaseClient.firestore, 'users', uid, 'activities');
   const newDoc = doc(activitiesRef);
 
   const compartidoCon = Array.isArray(payload.compartidoCon) ? payload.compartidoCon : [];
 
-  const data = {
+  const data = deepSanitizeForFirestore({
     titulo: payload.titulo ?? '',
     tipo: payload.tipo ?? 'OTRO',
     estado: payload.estado ?? 'PENDIENTE',
@@ -100,7 +124,7 @@ export async function createActivity(
     esCompartida: compartidoCon.length > 0,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  };
+  });
 
   await setDoc(newDoc, data as any);
 
@@ -126,9 +150,14 @@ export async function updateActivity(
   payload: Partial<ActividadDetail & { compartidoCon?: string[] }>,
 ): Promise<ActividadDetail | null> {
   const uid = currentUid();
+  
+  // Modo invitado: actualizar en localStorage
+  if (!uid) {
+    return updateActivityForGuest(id, payload);
+  }
   const ref = doc(firebaseClient.firestore, 'users', uid, 'activities', id);
 
-  const updateData = { ...payload, updatedAt: serverTimestamp() };
+  const updateData = deepSanitizeForFirestore({ ...payload, updatedAt: serverTimestamp() });
   await updateDoc(ref, updateData as any);
 
   // Update shared copies
@@ -155,6 +184,12 @@ export async function updateActivity(
 // ─── Delete activity and its shared copies ──────────────────
 export async function removeActivity(id: string): Promise<void> {
   const uid = currentUid();
+  
+  // Modo invitado: eliminar de localStorage
+  if (!uid) {
+    removeActivityForGuest(id);
+    return;
+  }
   const ref = doc(firebaseClient.firestore, 'users', uid, 'activities', id);
 
   // Get shared users before deleting
@@ -233,4 +268,111 @@ export async function updateSharedActivityStatus(
   } catch {
     // Owner might not exist or permission issue - silently fail
   }
+}
+
+// ─── Funciones para modo invitado (localStorage) ──────────────────
+
+const GUEST_ACTIVITIES_KEY = 'guest_activities';
+
+function getGuestActivities(): ActividadDetail[] {
+  try {
+    const data = localStorage.getItem(GUEST_ACTIVITIES_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveGuestActivities(activities: ActividadDetail[]): void {
+  try {
+    localStorage.setItem(GUEST_ACTIVITIES_KEY, JSON.stringify(activities));
+  } catch (error) {
+    console.error('Error guardando actividades en localStorage:', error);
+  }
+}
+
+async function createActivityForGuest(
+  payload: Partial<ActividadDetail> & { compartidoCon?: string[] },
+): Promise<ActividadDetail> {
+  const activities = getGuestActivities();
+  const newId = `guest_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
+  const newActivity: ActividadDetail = {
+    id: newId,
+    titulo: payload.titulo ?? '',
+    tipo: payload.tipo ?? 'OTRO',
+    estado: payload.estado ?? 'PENDIENTE',
+    materia: payload.materia ?? null,
+    fechaInicio: payload.fechaInicio ?? null,
+    horaInicio: payload.horaInicio ?? null,
+    duracionMinutos: payload.duracionMinutos ?? null,
+    prioridad: payload.prioridad ?? null,
+    color: payload.color ?? '#5082ef',
+    descripcion: payload.descripcion ?? null,
+    fechaEntrega: payload.fechaEntrega ?? null,
+    esPropietario: true,
+    esCompartida: false,
+    puedeEditar: true,
+    companerosIds: [],
+    recurrence: payload.recurrence,
+    updatedAt: new Date().toISOString(),
+  };
+
+  activities.push(newActivity);
+  saveGuestActivities(activities);
+  return newActivity;
+}
+
+async function updateActivityForGuest(
+  id: string,
+  payload: Partial<ActividadDetail & { compartidoCon?: string[] }>,
+): Promise<ActividadDetail | null> {
+  const activities = getGuestActivities();
+  const index = activities.findIndex(act => act.id === id);
+  
+  if (index === -1) return null;
+  
+  // Actualizar actividad existente
+  const updatedActivity = {
+    ...activities[index],
+    ...payload,
+    updatedAt: new Date().toISOString(),
+  };
+  
+  activities[index] = updatedActivity;
+  saveGuestActivities(activities);
+  return updatedActivity;
+}
+
+function removeActivityForGuest(id: string): void {
+  const activities = getGuestActivities();
+  const filtered = activities.filter(act => act.id !== id);
+  saveGuestActivities(filtered);
+}
+
+// Función para listar actividades de invitado
+export async function listGuestActivities(): Promise<ActividadListItem[]> {
+  const activities = getGuestActivities();
+  return activities.map(activity => ({
+    id: activity.id,
+    titulo: activity.titulo,
+    tipo: activity.tipo,
+    estado: activity.estado,
+    materia: activity.materia,
+    fechaInicio: activity.fechaInicio,
+    horaInicio: activity.horaInicio,
+    duracionMinutos: activity.duracionMinutos,
+    prioridad: activity.prioridad,
+    color: activity.color,
+    esPropietario: true,
+    esCompartida: false,
+    recurrence: activity.recurrence,
+    updatedAt: activity.updatedAt,
+  }));
+}
+
+// Función para obtener actividad específica de invitado
+export async function getGuestActivity(id: string): Promise<ActividadDetail | null> {
+  const activities = getGuestActivities();
+  return activities.find(act => act.id === id) || null;
 }

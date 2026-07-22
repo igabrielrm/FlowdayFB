@@ -10,7 +10,7 @@ import type { ActividadDetail } from '../types/activity';
 export default function ActivityEditPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const activityId = Number(id);
+  const activityId = id ?? '';
   const [detail, setDetail] = useState<ActividadDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -35,7 +35,6 @@ import NotificationsBell from './NotificationsBell';
 import OfflineBanner from './OfflineBanner';
 import ToastStack from './ToastStack';
 import MobileBottomNav from './MobileBottomNav';
-import VirtualCompanion from './VirtualCompanion';
 import { CHAT_UNREAD_EVENT } from '../events';
 import { profileInitials } from '../types/profile';
 
@@ -235,7 +234,6 @@ export default function AppLayout() {
       </Box>
 
       <MobileBottomNav />
-      <VirtualCompanion fabOnTop={location.pathname === '/chat' || location.pathname === '/notes' || location.pathname === '/activities'} />
     </Box>
   );
 }

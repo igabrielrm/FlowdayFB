@@ -1,4 +1,4 @@
-﻿export type UsuarioDto = {
+export type UsuarioDto = {
   id: number | string;
   nombre: string;
   correo: string | null;
@@ -26,10 +26,13 @@ import type { StressReport, WellbeingStats } from '../types/wellbeing';
 import {
   cacheApiGet,
   cacheSessionUser,
+  clearSessionUser,
   isBrowserOffline,
   readApiGet,
 } from '../offline/cache';
 import * as firebaseData from '../firebase/data';
+import * as firebaseCommunity from '../firebase/community';
+import * as firebaseChat from '../firebase/chat';
 import { firebaseClient, formatUser } from '../firebase/client';
 
 const OFFLINE_MSG = 'Sin conexión. Usa tus datos locales o conecta tu cuenta para respaldo en la nube.';
@@ -59,16 +62,25 @@ function mapFirebaseUser(user: ReturnType<typeof formatUser> | null): UsuarioDto
   };
 }
 
-async function ensureAuthUser() {
-  const authUser = firebaseClient.auth.currentUser;
-  if (!authUser) {
-    await firebaseClient.signInAnonymously();
+async function ensureAuthUser(): Promise<string | null> {
+  try {
+    return firebaseClient.auth.currentUser?.uid ?? null;
+  } catch {
+    return null;
   }
+}
+
+function authRequired<T>(uid: string | null, errorMsg = 'Inicia sesión para continuar.'): ApiResponse<T> | null {
+  if (uid) return null;
+  return fail(errorMsg);
 }
 
 export const api = {
   me: async () => {
-    await ensureAuthUser();
+    const authErr = authRequired(await ensureAuthUser());
+    if (authErr) return authErr;
+    const uid = await ensureAuthUser();
+    if (!uid) return fail<UsuarioDto>('No hay sesión activa');
     const current = formatUser(firebaseClient.auth.currentUser);
     const user = mapFirebaseUser(current);
     if (!user) return fail<UsuarioDto>('No hay sesión activa');
@@ -140,12 +152,16 @@ export const api = {
   },
   continueAsGuest: async () => {
     try {
-      await ensureAuthUser();
+      await firebaseClient.signInAnonymously();
       const current = formatUser(firebaseClient.auth.currentUser);
       const user = mapFirebaseUser(current);
       return user ? ok(user) : fail<UsuarioDto>('No se pudo continuar como invitado.');
     } catch (error: unknown) {
-      return fail<UsuarioDto>(String((error as Error).message || 'No se pudo continuar como invitado.'));
+      const err = error as { code?: string; message?: string };
+      const message = err.code === 'auth/admin-restricted-operation'
+        ? 'El acceso como invitado no está habilitado. Inicia sesión con tu cuenta.'
+        : String(err.message || 'No se pudo continuar como invitado.');
+      return fail<UsuarioDto>(message);
     }
   },
   mobileCompatibility: async () => ok(true),
@@ -153,16 +169,16 @@ export const api = {
   logout: async () => {
     try {
       await firebaseClient.signOut();
-      await firebaseClient.signInAnonymously();
+      clearSessionUser();
       return ok(null);
     } catch {
       return fail<void>('No se pudo cerrar la sesión.');
     }
   },
 
+  // ─── Activities (guest accessible) ──────────────────────────────
   activities: {
     list: async () => {
-      await ensureAuthUser();
       try {
         const items = await firebaseData.listActivities();
         return ok(items);
@@ -171,7 +187,6 @@ export const api = {
       }
     },
     get: async (id: number | string) => {
-      await ensureAuthUser();
       const cached = readApiGet<ActividadDetail>(`/api/v1/activities/${id}`);
       if (cached) return ok(cached);
       try {
@@ -182,7 +197,6 @@ export const api = {
       }
     },
     byDate: async (fecha: string) => {
-      await ensureAuthUser();
       try {
         const items = await firebaseData.listActivitiesByDate(fecha);
         return ok(items);
@@ -191,7 +205,6 @@ export const api = {
       }
     },
     byMonth: async (year: number, month: number) => {
-      await ensureAuthUser();
       try {
         const items = await firebaseData.listActivitiesByMonth(year, month);
         return ok(items);
@@ -200,7 +213,6 @@ export const api = {
       }
     },
     create: async (payload: CreateActividadPayload) => {
-      await ensureAuthUser();
       try {
         const detail = await firebaseData.createActivity(payload);
         return ok(detail);
@@ -208,8 +220,7 @@ export const api = {
         return fail<ActividadDetail>(String((error as Error).message || 'No se pudo crear la actividad'));
       }
     },
-    update: async (id: number, payload: UpdateActividadPayload) => {
-      await ensureAuthUser();
+    update: async (id: number | string, payload: UpdateActividadPayload) => {
       try {
         const detail = await firebaseData.updateActivity(String(id), payload);
         return detail ? ok(detail) : fail<ActividadDetail>('Actividad no encontrada');
@@ -217,8 +228,7 @@ export const api = {
         return fail<ActividadDetail>(String((error as Error).message || 'No se pudo actualizar la actividad'));
       }
     },
-    updateStatus: async (id: number, estado: string) => {
-      await ensureAuthUser();
+    updateStatus: async (id: number | string, estado: string) => {
       try {
         const item = await firebaseData.updateActivityStatus(String(id), estado);
         return item ? ok(item) : fail<ActividadListItem>('Actividad no encontrada');
@@ -226,8 +236,7 @@ export const api = {
         return fail<ActividadListItem>(String((error as Error).message || 'No se pudo actualizar el estado'));
       }
     },
-    remove: async (id: number) => {
-      await ensureAuthUser();
+    remove: async (id: number | string) => {
       try {
         await firebaseData.removeActivity(String(id));
         return ok(null);
@@ -236,7 +245,6 @@ export const api = {
       }
     },
     priorityAlerts: async () => {
-      await ensureAuthUser();
       try {
         const items = await firebaseData.priorityAlerts();
         return ok(items);
@@ -245,7 +253,6 @@ export const api = {
       }
     },
     reschedulable: async () => {
-      await ensureAuthUser();
       try {
         const items = await firebaseData.reschedulable();
         return ok(items);
@@ -253,8 +260,7 @@ export const api = {
         return ok([]);
       }
     },
-    reschedule: async (id: number, fecha: string, hora?: string) => {
-      await ensureAuthUser();
+    reschedule: async (id: number | string, fecha: string, hora?: string) => {
       try {
         const detail = await firebaseData.reschedule(String(id), fecha, hora);
         return detail ? ok(detail) : fail<ActividadDetail>('No se pudo reagendar');
@@ -264,9 +270,9 @@ export const api = {
     },
   },
 
+  // ─── Schedule (guest accessible) ────────────────────────────────
   schedule: {
     list: async () => {
-      await ensureAuthUser();
       try {
         const blocks = await firebaseData.listSchedule();
         return ok(blocks);
@@ -275,7 +281,6 @@ export const api = {
       }
     },
     create: async (payload: CreateScheduleBlockPayload) => {
-      await ensureAuthUser();
       try {
         const block = await firebaseData.createScheduleBlock(payload as any);
         return ok(block);
@@ -283,8 +288,7 @@ export const api = {
         return fail<ScheduleBlock>(String((error as Error).message || 'No se pudo crear el bloque')); 
       }
     },
-    update: async (id: number, payload: CreateScheduleBlockPayload) => {
-      await ensureAuthUser();
+    update: async (id: number | string, payload: CreateScheduleBlockPayload) => {
       try {
         const block = await firebaseData.updateScheduleBlock(String(id), payload as any);
         return block ? ok(block) : fail<ScheduleBlock>('Bloque no encontrado');
@@ -292,8 +296,7 @@ export const api = {
         return fail<ScheduleBlock>(String((error as Error).message || 'No se pudo actualizar el bloque'));
       }
     },
-    remove: async (id: number) => {
-      await ensureAuthUser();
+    remove: async (id: number | string) => {
       try {
         await firebaseData.removeScheduleBlock(String(id));
         return ok(null);
@@ -302,7 +305,6 @@ export const api = {
       }
     },
     alert: async (minutesBefore?: number) => {
-      await ensureAuthUser();
       try {
         const alert = await firebaseData.scheduleAlert();
         return ok(alert as ScheduleAlert | null);
@@ -312,9 +314,9 @@ export const api = {
     },
   },
 
+  // ─── Notes (guest accessible) ────────────────────────────────────
   notes: {
     list: async () => {
-      await ensureAuthUser();
       try {
         const notes = await firebaseData.listNotes();
         return ok(notes);
@@ -323,7 +325,6 @@ export const api = {
       }
     },
     create: async (titulo: string, contenido: string, color: string, pinned: boolean) => {
-      await ensureAuthUser();
       try {
         const note = await firebaseData.createNote({ titulo, contenido, color, pinned });
         return ok(note);
@@ -332,7 +333,6 @@ export const api = {
       }
     },
     update: async (id: string, patch: Partial<Note>) => {
-      await ensureAuthUser();
       try {
         const note = await firebaseData.updateNote(id, patch);
         return note ? ok(note) : fail<Note>('Nota no encontrada');
@@ -341,7 +341,6 @@ export const api = {
       }
     },
     remove: async (id: string) => {
-      await ensureAuthUser();
       try {
         await firebaseData.removeNote(id);
         return ok(null);
@@ -351,6 +350,7 @@ export const api = {
     },
   },
 
+  // ─── Profile (needs auth) ────────────────────────────────────────
   profile: {
     get: async () => {
       try {
@@ -388,6 +388,7 @@ export const api = {
     uploadPhoto: async () => fail<Profile>('Carga de foto no soportada en esta versión'),
   },
 
+  // ─── Bienestar (guest accessible) ────────────────────────────────
   bienestar: {
     stats: async () => {
       try {
@@ -423,26 +424,135 @@ export const api = {
     },
   },
 
+  // ─── Community (auth required) ───────────────────────────────────
   community: {
-    stats: async () => fail<CommunityStats>('Funcionalidad de comunidad no disponible'),
-    users: async () => ok([]),
-    suggestions: async (limit: number) => ok([]),
-    connections: async () => ok([]),
-    connect: async () => fail<void>('Funcionalidad de comunidad no disponible'),
-    accept: async () => fail<void>('Funcionalidad de comunidad no disponible'),
-    reject: async () => fail<void>('Funcionalidad de comunidad no disponible'),
-    remove: async () => fail<void>('Funcionalidad de comunidad no disponible'),
+    stats: async () => {
+      const authErr = authRequired(await ensureAuthUser()); if (authErr) return authErr;
+      try {
+        const stats = await firebaseCommunity.getCommunityStats();
+        return ok(stats);
+      } catch {
+        return fail<CommunityStats>('No se pudieron cargar las estadísticas');
+      }
+    },
+    users: async () => {
+      const authErr = authRequired(await ensureAuthUser()); if (authErr) return authErr;
+      try {
+        const users = await firebaseCommunity.listOtherUsers();
+        return ok(users as any);
+      } catch {
+        return ok([]);
+      }
+    },
+    suggestions: async (limit: number) => {
+      const authErr = authRequired(await ensureAuthUser()); if (authErr) return authErr;
+      try {
+        const users = await firebaseCommunity.listOtherUsers();
+        return ok(users.slice(0, limit) as any);
+      } catch {
+        return ok([]);
+      }
+    },
+    connections: async () => {
+      const authErr = authRequired(await ensureAuthUser()); if (authErr) return authErr;
+      try {
+        const friends = await firebaseCommunity.getFriends();
+        return ok(friends as any);
+      } catch {
+        return ok([]);
+      }
+    },
+    connect: async (targetUid: string) => {
+      const authErr = authRequired(await ensureAuthUser()); if (authErr) return authErr;
+      const ok2 = await firebaseCommunity.sendConnectionRequest(targetUid);
+      return ok2 ? ok(null) : fail<void>('No se pudo enviar la solicitud');
+    },
+    accept: async (fromUid: string) => {
+      const authErr = authRequired(await ensureAuthUser()); if (authErr) return authErr;
+      const ok2 = await firebaseCommunity.acceptConnectionRequest(fromUid);
+      return ok2 ? ok(null) : fail<void>('No se pudo aceptar la solicitud');
+    },
+    reject: async (fromUid: string) => {
+      const authErr = authRequired(await ensureAuthUser()); if (authErr) return authErr;
+      const ok2 = await firebaseCommunity.rejectConnectionRequest(fromUid);
+      return ok2 ? ok(null) : fail<void>('No se pudo rechazar la solicitud');
+    },
+    remove: async (friendUid: string) => {
+      const authErr = authRequired(await ensureAuthUser()); if (authErr) return authErr;
+      const ok2 = await firebaseCommunity.removeConnection(friendUid);
+      return ok2 ? ok(null) : fail<void>('No se pudo eliminar la conexión');
+    },
   },
 
+  // ─── Chat (auth required) ────────────────────────────────────────
   chat: {
-    conversations: async () => ok([]),
-    messages: async () => ok([]),
-    send: async () => fail<any>('Chat no disponible'),
-    markRead: async () => fail<any>('Chat no disponible'),
-    deleteConversation: async () => fail<any>('Chat no disponible'),
-    unreadCount: async () => ok({ count: 0 }),
+    conversations: async () => {
+      const authErr = authRequired(await ensureAuthUser()); if (authErr) return authErr;
+      try {
+        const friends = await firebaseCommunity.getFriends();
+        const convs = await firebaseChat.getConversations(friends);
+        return ok(convs as any);
+      } catch {
+        return ok([]);
+      }
+    },
+    messages: async (otherUid: string) => {
+      const authErr = authRequired(await ensureAuthUser()); if (authErr) return authErr;
+      try {
+        const msgs = await firebaseChat.getMessages(otherUid);
+        return ok(msgs as any);
+      } catch {
+        return ok([]);
+      }
+    },
+    send: async (destinatarioId: string, text: string) => {
+      const authErr = authRequired(await ensureAuthUser()); if (authErr) return authErr;
+      try {
+        const msg = await firebaseChat.sendMessage(destinatarioId, text);
+        return msg ? ok(msg as any) : fail<any>('No se pudo enviar el mensaje');
+      } catch (error: unknown) {
+        return fail<any>(String((error as Error).message || 'No se pudo enviar el mensaje'));
+      }
+    },
+    markRead: async (otherUid: string) => {
+      const authErr = authRequired(await ensureAuthUser()); if (authErr) return authErr;
+      try {
+        await firebaseChat.markMessagesAsRead(otherUid);
+        return ok(null);
+      } catch {
+        return fail<any>('No se pudo marcar como leído');
+      }
+    },
+    deleteConversation: async (otherUid: string) => {
+      const authErr = authRequired(await ensureAuthUser()); if (authErr) return authErr;
+      try {
+        await firebaseChat.deleteConversation(otherUid);
+        return ok(null);
+      } catch {
+        return fail<any>('No se pudo eliminar la conversación');
+      }
+    },
+    unreadCount: async () => {
+      const authErr = authRequired(await ensureAuthUser()); if (authErr) return authErr;
+      try {
+        // Count unread messages via a query
+        const uid = await ensureAuthUser();
+        if (!uid) return ok({ count: 0 });
+        const { collection, getDocs, query, where } = await import('firebase/firestore');
+        const unreadQuery = query(
+          collection(firebaseClient.firestore, 'mensajes'),
+          where('destinatarioId', '==', uid),
+          where('leida', '==', false),
+        );
+        const snap = await getDocs(unreadQuery);
+        return ok({ count: snap.size });
+      } catch {
+        return ok({ count: 0 });
+      }
+    },
   },
 
+  // ─── Notifications ──────────────────────────────────────────────
   notifications: {
     list: async () => ok([]),
     unreadCount: async () => ok({ count: 0 }),
@@ -451,17 +561,7 @@ export const api = {
     remove: async () => ok({ ok: true, count: 0 }),
   },
 
-  ia: {
-    chat: async () => fail<any>('IA no disponible'),
-    status: async () => fail<any>('IA no disponible'),
-  },
-
-  assistant: {
-    message: async () => fail<any>('Asistente no disponible'),
-    confirm: async () => fail<any>('Asistente no disponible'),
-    cancel: async () => fail<any>('Asistente no disponible'),
-  },
-
+  // ─── Admin ───────────────────────────────────────────────────────
   admin: {
     stats: async () => fail<AdminStats>('Admin no disponible'),
     wellbeing: async () => fail<AdminWellbeing>('Admin no disponible'),

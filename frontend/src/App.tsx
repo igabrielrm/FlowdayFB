@@ -1,5 +1,6 @@
+import { Component, ErrorInfo, ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { Box, CircularProgress } from '@mui/material';
+import { Box, Button, CircularProgress, Typography } from '@mui/material';
 import { useAuth } from './auth/AuthContext';
 import AppLayout from './components/AppLayout';
 import ActivitiesPage from './pages/ActivitiesPage';
@@ -24,6 +25,64 @@ import { NotificationsProvider } from './notifications/NotificationsContext';
 import LocalRemindersBridge from './notifications/LocalRemindersBridge';
 import NativeAppBridge from './components/NativeAppBridge';
 import NotesPage from './pages/NotesPage';
+
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('ErrorBoundary capturó un error:', error, errorInfo);
+  }
+
+  handleReset = () => {
+    this.setState({ hasError: false, error: null });
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Box
+          sx={{
+            minHeight: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            p: 3,
+            textAlign: 'center',
+          }}
+        >
+          <Typography variant="h5" gutterBottom>
+            Algo salió mal
+          </Typography>
+          <Typography color="text.secondary" sx={{ mb: 3 }}>
+            {this.state.error?.message || 'Ha ocurrido un error inesperado'}
+          </Typography>
+          <Button variant="contained" onClick={this.handleReset}>
+            Volver a la aplicación
+          </Button>
+        </Box>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { loading } = useAuth();
@@ -53,7 +112,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <>
+    <ErrorBoundary>
       <NativeAppBridge />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
@@ -96,6 +155,6 @@ export default function App() {
       </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </>
+    </ErrorBoundary>
   );
 }
