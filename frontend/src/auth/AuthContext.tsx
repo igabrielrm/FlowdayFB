@@ -13,6 +13,7 @@ type AuthContextValue = {
   loginWithGoogle: () => Promise<string | null>;
   continueAsGuest: () => Promise<string | null>;
   logout: () => Promise<void>;
+  refresh: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -142,9 +143,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const refresh = useCallback(async () => {
+    const authUser = firebaseClient.auth.currentUser;
+    if (!authUser) return;
+    try {
+      const formatted = formatUser(authUser);
+      if (!formatted) return;
+      const userDto: UsuarioDto = {
+        id: formatted.uid,
+        nombre: formatted.nombre,
+        correo: formatted.correo,
+        rol: 'USER',
+        tema: 'dark',
+      };
+      setUser(userDto);
+      cacheSessionUser(userDto);
+    } catch (error) {
+      console.error('Error refreshing user:', error);
+    }
+  }, []);
+
   const value = useMemo(
-    () => ({ user, loading, login, loginWithGoogle, continueAsGuest, logout }),
-    [user, loading, login, loginWithGoogle, continueAsGuest, logout],
+    () => ({ user, loading, login, loginWithGoogle, continueAsGuest, logout, refresh }),
+    [user, loading, login, loginWithGoogle, continueAsGuest, logout, refresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

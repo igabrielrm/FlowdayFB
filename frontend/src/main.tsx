@@ -15,6 +15,14 @@ if (typeof g.global === 'undefined') {
   g.global = g;
 }
 
+// Catch uncaught errors so the app shows something instead of a white screen
+window.addEventListener('error', (e) => {
+  console.error('Uncaught error:', e.error);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('Unhandled promise rejection:', e.reason);
+});
+
 const savedTheme = localStorage.getItem('theme');
 if (savedTheme === 'light' || savedTheme === 'dark') {
   applyTheme(savedTheme);
@@ -49,5 +57,7 @@ function renderApp() {
   );
 }
 
-void hydrateOfflineState();
+void hydrateOfflineState().catch((err) => {
+  console.warn('hydrateOfflineState failed:', err);
+});
 renderApp();

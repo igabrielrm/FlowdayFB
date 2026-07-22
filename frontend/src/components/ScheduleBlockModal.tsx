@@ -247,7 +247,7 @@ export default function ScheduleBlockModal({
                 value={horaInicio}
                 onChange={(e) => setHoraInicio(e.target.value)}
                 required
-                InputLabelProps={{ shrink: true }}
+                slotProps={{ inputLabel: { shrink: true } }}
                 fullWidth
               />
             </Stack>
@@ -258,7 +258,7 @@ export default function ScheduleBlockModal({
               value={horaFin}
               onChange={(e) => setHoraFin(e.target.value)}
               required
-              InputLabelProps={{ shrink: true }}
+              slotProps={{ inputLabel: { shrink: true } }}
             />
 
             <ColorSwatchPicker

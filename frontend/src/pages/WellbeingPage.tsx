@@ -104,7 +104,13 @@ export default function WellbeingPage() {
           } else {
             setToast(`¡Enfoque de ${mins} min! Descansa ${pomodoro.shortBreakMinutes} min. (ciclo ${nextCycle}/${pomodoro.cyclesTotal})`);
           }
-          refresh();
+          // Mark linked activity as completed
+          const linkedId = pomodoro.linkedActivityId;
+          if (linkedId !== '') {
+            api.activities.updateStatus(String(linkedId), 'COMPLETADA').then(() => refresh());
+          } else {
+            refresh();
+          }
         }
       });
     });
@@ -114,10 +120,10 @@ export default function WellbeingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function onActivityLink(id: number | '') {
+  function onActivityLink(id: number | string | '') {
     pomodoro.setLinkedActivityId(id);
     if (!id) return;
-    const act = activities.find((a) => a.id === id);
+    const act = activities.find((a) => String(a.id) === String(id));
     if (!act?.duracionMinutos) return;
     const mins = Math.max(5, Math.min(120, act.duracionMinutos));
     pomodoro.applyWorkDuration(mins);
@@ -209,8 +215,8 @@ export default function WellbeingPage() {
                 <InputLabel>Vincular tarea</InputLabel>
                 <Select
                   label="Vincular tarea"
-                  value={pomodoro.linkedActivityId === '' ? '' : pomodoro.linkedActivityId}
-                  onChange={(e) => onActivityLink(e.target.value === '' ? '' : Number(e.target.value))}
+                  value={pomodoro.linkedActivityId === '' ? '' : String(pomodoro.linkedActivityId)}
+                  onChange={(e) => onActivityLink(e.target.value === '' ? '' : e.target.value)}
                 >
                   <MenuItem value="">Sin tarea vinculada</MenuItem>
                   {activities.map((a) => (

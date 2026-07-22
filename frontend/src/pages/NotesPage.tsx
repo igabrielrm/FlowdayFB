@@ -12,6 +12,7 @@ import {
   Paper,
   Tooltip,
   Typography,
+  useTheme,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
@@ -32,9 +33,12 @@ import type { RecurrenceConfig, RecurrenceKind } from '../utils/recurrence';
 // ─── NoteCard ────────────────────────────────────────────────────────────────
 
 function NoteCard({ note, onClick }: { note: Note; onClick: (n: Note) => void }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const colorDef = NOTE_COLORS.find((c) => c.value === note.color);
-  const bg = colorDef?.bgLight ?? '#f8fafc';
-  const textColor = '#0f172a';
+  const bg = isDark ? (colorDef?.bgDark ?? '#1e293b') : (colorDef?.bgLight ?? '#f8fafc');
+  const textColor = isDark ? '#f1f5f9' : '#0f172a';
+  const isWhite = note.color === '#ffffff';
 
   return (
     <Paper
@@ -46,14 +50,14 @@ function NoteCard({ note, onClick }: { note: Note; onClick: (n: Note) => void })
         cursor: 'pointer',
         bgcolor: bg,
         border: '1.5px solid',
-        borderColor: bg === '#ffffff' || bg === '#f8fafc' ? '#e2e8f0' : 'transparent',
+        borderColor: isWhite ? (isDark ? '#334155' : '#e2e8f0') : 'transparent',
         transition: 'all 0.18s ease',
         minHeight: 100,
         position: 'relative',
         overflow: 'hidden',
         '&:hover': {
           transform: 'translateY(-2px)',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.10)',
+          boxShadow: isDark ? '0 8px 24px rgba(0,0,0,0.30)' : '0 8px 24px rgba(0,0,0,0.10)',
           borderColor: 'primary.main',
         },
       }}
@@ -103,22 +107,26 @@ function NoteCard({ note, onClick }: { note: Note; onClick: (n: Note) => void })
 // ─── ColorPicker ──────────────────────────────────────────────────────────────
 
 function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   return (
-    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, p: 1 }}>
+    <Box sx={{ display: 'flex', flexWrap: 'nowrap', gap: 1, p: 1, overflowX: 'auto' }}>
       {NOTE_COLORS.map((c) => (
         <Box
           key={c.value}
           onClick={() => onChange(c.value)}
           sx={{
-            width: 26,
-            height: 26,
+            minWidth: 28,
+            width: 28,
+            height: 28,
             borderRadius: '50%',
-            bgcolor: c.bgLight,
-            border: '2px solid',
-            borderColor: c.value === value ? 'primary.main' : c.bgLight === '#ffffff' ? '#cbd5e1' : 'transparent',
+            bgcolor: isDark ? c.bgDark : c.bgLight,
+            border: '2.5px solid',
+            borderColor: c.value === value ? 'primary.main' : (isDark ? '#475569' : '#cbd5e1'),
             cursor: 'pointer',
-            transition: 'transform 0.12s',
-            '&:hover': { transform: 'scale(1.2)' },
+            transition: 'transform 0.12s, border-color 0.12s',
+            flexShrink: 0,
+            '&:hover': { transform: 'scale(1.15)' },
           }}
         />
       ))}
@@ -139,6 +147,8 @@ function NoteEditorDialog({
   onSave: (patch: Partial<Note>) => void;
   onDelete: () => void;
 }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [titulo, setTitulo] = useState(note?.titulo ?? '');
   const [contenido, setContenido] = useState(note?.contenido ?? '');
   const [color, setColor] = useState(note?.color ?? '#ffffff');
@@ -148,11 +158,10 @@ function NoteEditorDialog({
   const [recurrenceKind, setRecurrenceKind] = useState<RecurrenceKind>(note?.recurrence?.kind ?? 'daily');
   const [recurrenceInterval, setRecurrenceInterval] = useState(String(note?.recurrence?.interval ?? 1));
   const [recurrenceEndDate, setRecurrenceEndDate] = useState(note?.recurrence?.endDate ?? '');
-  const [recurrenceMaxOccurrences, setRecurrenceMaxOccurrences] = useState(String(note?.recurrence?.maxOccurrences ?? 3));
   const dirty = useRef(false);
 
   const colorDef = NOTE_COLORS.find((c) => c.value === color);
-  const bg = colorDef?.bgLight ?? '#f8fafc';
+  const bg = isDark ? (colorDef?.bgDark ?? '#1e293b') : (colorDef?.bgLight ?? '#f8fafc');
 
   useEffect(() => {
     dirty.current = false;
@@ -164,7 +173,6 @@ function NoteEditorDialog({
     setRecurrenceKind(note?.recurrence?.kind ?? 'daily');
     setRecurrenceInterval(String(note?.recurrence?.interval ?? 1));
     setRecurrenceEndDate(note?.recurrence?.endDate ?? '');
-    setRecurrenceMaxOccurrences(String(note?.recurrence?.maxOccurrences ?? 3));
   }, [note?.id]);
 
   const handleChange = (field: string, value: unknown) => {
@@ -183,7 +191,6 @@ function NoteEditorDialog({
             kind: recurrenceKind,
             interval: Number(recurrenceInterval) || 1,
             endDate: recurrenceEndDate || undefined,
-            maxOccurrences: Number(recurrenceMaxOccurrences) || 3,
           } satisfies RecurrenceConfig
         : undefined;
       onSave({ titulo, contenido, color, pinned, recurrence });
@@ -258,6 +265,7 @@ function NoteEditorDialog({
                     <MenuItem value="daily">Diaria</MenuItem>
                     <MenuItem value="weekly">Semanal</MenuItem>
                     <MenuItem value="monthly">Mensual</MenuItem>
+                    <MenuItem value="annual">Anual</MenuItem>
                   </Select>
                 </FormControl>
                 <TextField
@@ -277,16 +285,7 @@ function NoteEditorDialog({
                   size="small"
                   value={recurrenceEndDate}
                   onChange={(e) => setRecurrenceEndDate(e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                  fullWidth
-                />
-                <TextField
-                  label="Máx. repeticiones"
-                  type="number"
-                  size="small"
-                  value={recurrenceMaxOccurrences}
-                  onChange={(e) => setRecurrenceMaxOccurrences(e.target.value)}
-                  inputProps={{ min: 1, max: 24 }}
+                  slotProps={{ inputLabel: { shrink: true } }}
                   fullWidth
                 />
               </Stack>
@@ -558,7 +557,7 @@ export default function NotesPage() {
           </Box>
           <Grid container spacing={1.5}>
             {pinned.map((n) => (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={n.id}>
+              <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={n.id}>
                 <NoteCard note={n} onClick={setEditNote} />
               </Grid>
             ))}
@@ -576,7 +575,7 @@ export default function NotesPage() {
           )}
           <Grid container spacing={1.5}>
             {others.map((n) => (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={n.id}>
+              <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={n.id}>
                 <NoteCard note={n} onClick={setEditNote} />
               </Grid>
             ))}

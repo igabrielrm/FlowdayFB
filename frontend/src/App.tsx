@@ -25,6 +25,7 @@ import { NotificationsProvider } from './notifications/NotificationsContext';
 import LocalRemindersBridge from './notifications/LocalRemindersBridge';
 import NativeAppBridge from './components/NativeAppBridge';
 import NotesPage from './pages/NotesPage';
+import SettingsPage from './pages/SettingsPage';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -142,6 +143,7 @@ export default function App() {
         <Route path="calendar" element={<CalendarPage />} />
         <Route path="schedule" element={<SchedulePage />} />
         <Route path="notes" element={<NotesPage />} />
+        <Route path="settings" element={<SettingsPage />} />
       </Route>
       <Route
         path="/admin"

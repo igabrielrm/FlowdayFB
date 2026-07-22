@@ -42,9 +42,8 @@ function weekEndIso() {
   return shiftLocalDateIso(localDateIso(), 7);
 }
 
-function estadoChipColor(estado: string): 'default' | 'success' | 'warning' | 'info' {
+function estadoChipColor(estado: string): 'default' | 'success' | 'warning' {
   if (estado === 'COMPLETADA') return 'success';
-  if (estado === 'EN_PROCESO') return 'info';
   return 'warning';
 }
 
@@ -52,7 +51,7 @@ export default function ActivitiesPage() {
   const theme = useTheme();
   const location = useLocation();
   const [items, setItems] = useState<ActividadListItem[]>([]);
-  const [filter, setFilter] = useState<'ALL' | 'PENDIENTE' | 'EN_PROCESO' | 'COMPLETADA'>('ALL');
+  const [filter, setFilter] = useState<'ALL' | 'PENDIENTE' | 'COMPLETADA'>('ALL');
   const [dateFilter, setDateFilter] = useState<DateFilter>('ALL');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);

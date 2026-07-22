@@ -93,7 +93,6 @@ export default function ActivityForm({
   const [recurrenceKind, setRecurrenceKind] = useState<RecurrenceKind>(initial?.recurrence?.kind ?? 'daily');
   const [recurrenceInterval, setRecurrenceInterval] = useState(String(initial?.recurrence?.interval ?? 1));
   const [recurrenceEndDate, setRecurrenceEndDate] = useState(initial?.recurrence?.endDate ?? '');
-  const [recurrenceMaxOccurrences, setRecurrenceMaxOccurrences] = useState(String(initial?.recurrence?.maxOccurrences ?? 3));
   const [connections, setConnections] = useState<UsuarioDto[]>([]);
   const [materiasHorario, setMateriasHorario] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -146,7 +145,6 @@ export default function ActivityForm({
           kind: recurrenceKind,
           interval: parsePositiveInt(recurrenceInterval, 1),
           endDate: recurrenceEndDate || undefined,
-          maxOccurrences: parsePositiveInt(recurrenceMaxOccurrences, 3),
         } satisfies RecurrenceConfig
       : undefined;
 
@@ -193,23 +191,23 @@ export default function ActivityForm({
         </FormControl>
 
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-          <TextField
-            label="Fecha"
-            type="date"
-            value={fechaInicio}
-            onChange={(e) => setFechaInicio(e.target.value)}
-            required
-            InputLabelProps={{ shrink: true }}
-            fullWidth
-          />
-          <TextField
-            label="Hora"
-            type="time"
-            value={horaInicio}
-            onChange={(e) => setHoraInicio(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-            fullWidth
-          />
+        <TextField
+          label="Fecha"
+          type="date"
+          value={fechaInicio}
+          onChange={(e) => setFechaInicio(e.target.value)}
+          required
+          slotProps={{ inputLabel: { shrink: true } }}
+          fullWidth
+        />
+        <TextField
+          label="Hora"
+          type="time"
+          value={horaInicio}
+          onChange={(e) => setHoraInicio(e.target.value)}
+          slotProps={{ inputLabel: { shrink: true } }}
+          fullWidth
+        />
         </Stack>
 
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
@@ -308,6 +306,7 @@ export default function ActivityForm({
                     <MenuItem value="daily">Diaria</MenuItem>
                     <MenuItem value="weekly">Semanal</MenuItem>
                     <MenuItem value="monthly">Mensual</MenuItem>
+                    <MenuItem value="annual">Anual</MenuItem>
                   </Select>
                 </FormControl>
                 <TextField
@@ -327,16 +326,7 @@ export default function ActivityForm({
                   size="small"
                   value={recurrenceEndDate}
                   onChange={(e) => setRecurrenceEndDate(e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                  fullWidth
-                />
-                <TextField
-                  label="Máx. repeticiones"
-                  type="number"
-                  size="small"
-                  value={recurrenceMaxOccurrences}
-                  onChange={(e) => setRecurrenceMaxOccurrences(e.target.value)}
-                  inputProps={{ min: 1, max: 24 }}
+                  slotProps={{ inputLabel: { shrink: true } }}
                   fullWidth
                 />
               </Stack>

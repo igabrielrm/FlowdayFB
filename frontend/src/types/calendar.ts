@@ -1,4 +1,5 @@
 import type { ActividadListItem } from './activity';
+import { buildOccurrences } from '../utils/recurrence';
 
 export type CalendarCell = {
   key: string;
@@ -7,6 +8,8 @@ export type CalendarCell = {
   inMonth: boolean;
   isToday: boolean;
 };
+
+export type CalendarView = 'month' | 'year';
 
 const WEEKDAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
@@ -76,6 +79,45 @@ export function buildMonthGrid(year: number, month: number): CalendarCell[] {
   }
 
   return cells;
+}
+
+export function expandRecurringActivities(
+  activities: ActividadListItem[],
+  year: number,
+  month: number,
+): ActividadListItem[] {
+  const diasEnMes = new Date(year, month, 0).getDate();
+  const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
+  const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(diasEnMes).padStart(2, '0')}`;
+  const result: ActividadListItem[] = [];
+
+  for (const a of activities) {
+    if (!a.recurrence?.enabled || !a.fechaInicio) {
+      result.push(a);
+      continue;
+    }
+    const dates = buildOccurrences(
+      a.recurrence.kind,
+      a.recurrence.interval,
+      a.fechaInicio,
+      24,
+      a.recurrence.endDate,
+    );
+    let found = false;
+    for (const d of dates) {
+      if (d >= monthStart && d <= monthEnd && d !== a.fechaInicio) {
+        result.push({ ...a, id: `${a.id}__${d}`, fechaInicio: d });
+        found = true;
+      }
+    }
+    if (!found) {
+      if (a.fechaInicio >= monthStart && a.fechaInicio <= monthEnd) {
+        result.push(a);
+      }
+    }
+  }
+
+  return result;
 }
 
 export function groupByDate(activities: ActividadListItem[]) {

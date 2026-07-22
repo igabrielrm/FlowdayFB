@@ -346,15 +346,6 @@ export async function priorityAlerts(): Promise<ActividadListItem[]> {
   return activities.filter((item) => item.prioridad === 'ALTA' && item.estado !== 'COMPLETADA').slice(0, 5);
 }
 
-export async function reschedulable(): Promise<ActividadListItem[]> {
-  const activities = await listActivities();
-  return activities.filter((item) => item.estado === 'PENDIENTE' && item.fechaInicio != null && item.horaInicio != null).slice(0, 10);
-}
-
-export async function reschedule(id: string, fecha: string, hora?: string): Promise<ActividadDetail | null> {
-  return updateActivity(id, { fechaInicio: fecha, horaInicio: hora ?? null });
-}
-
 // ─── Schedule ──────────────────────────────────────────────────
 
 export async function listSchedule(): Promise<ScheduleBlock[]> {
@@ -363,8 +354,9 @@ export async function listSchedule(): Promise<ScheduleBlock[]> {
     return lsGet<ScheduleBlock>('schedule');
   }
   try {
-    const snapshot = await getDocs(query(collectionRef(uid, 'schedule'), orderBy('diaSemana', 'asc'), orderBy('horaInicio', 'asc')));
+    const snapshot = await getDocs(collectionRef(uid, 'schedule'));
     const blocks = snapshot.docs.map((docSnap) => normalizeSnapshot<ScheduleBlock>(docSnap.data(), docSnap.id));
+    blocks.sort((a, b) => a.diaSemana - b.diaSemana || a.horaInicio.localeCompare(b.horaInicio));
     return blocks;
   } catch (error) {
     console.error('Error al listar horario:', error);
@@ -534,19 +526,24 @@ export async function createNote(note: Partial<Note>): Promise<Note> {
     };
     return lsCreate<Note>('notes', newNote);
   }
-  const ref = doc(collection(firebaseClient.firestore, 'users', uid, 'notes'));
-  const data = {
-    titulo: note.titulo ?? '',
-    contenido: note.contenido ?? '',
-    pinned: note.pinned ?? false,
-    color: note.color ?? '#ffffff',
-    recurrence: note.recurrence ?? undefined,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  };
-  await setDoc(ref, data as any);
-  const created = normalizeSnapshot<Note>(data, ref.id);
-  return created;
+  try {
+    const ref = doc(collection(firebaseClient.firestore, 'users', uid, 'notes'));
+    const data = deepSanitizeForFirestore({
+      titulo: note.titulo ?? '',
+      contenido: note.contenido ?? '',
+      pinned: note.pinned ?? false,
+      color: note.color ?? '#ffffff',
+      recurrence: note.recurrence,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    await setDoc(ref, data as any);
+    const created = normalizeSnapshot<Note>(data, ref.id);
+    return created;
+  } catch (error) {
+    console.error('Error al crear nota:', error);
+    throw error;
+  }
 }
 
 export async function updateNote(id: string, patch: Partial<Note>): Promise<Note | null> {
@@ -554,12 +551,17 @@ export async function updateNote(id: string, patch: Partial<Note>): Promise<Note
   if (!uid) {
     return lsUpdate<Note>('notes', id, patch);
   }
-  const ref = doc(collectionRef(uid, 'notes'), id);
-  await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() } as any);
-  const snapshot = await getDoc(ref);
-  if (!snapshot.exists()) return null;
-  const note = normalizeSnapshot<Note>(snapshot.data(), snapshot.id);
-  return note;
+  try {
+    const ref = doc(collectionRef(uid, 'notes'), id);
+    const sanitized = deepSanitizeForFirestore({ ...patch, updatedAt: serverTimestamp() });
+    await updateDoc(ref, sanitized as any);
+    const snapshot = await getDoc(ref);
+    if (!snapshot.exists()) return null;
+    return normalizeSnapshot<Note>(snapshot.data(), snapshot.id);
+  } catch (error) {
+    console.error('Error al actualizar nota:', error);
+    throw error;
+  }
 }
 
 export async function removeNote(id: string): Promise<void> {
@@ -568,7 +570,12 @@ export async function removeNote(id: string): Promise<void> {
     lsRemove<Note>('notes', id);
     return;
   }
-  await deleteDoc(doc(collectionRef(uid, 'notes'), id));
+  try {
+    await deleteDoc(doc(collectionRef(uid, 'notes'), id));
+  } catch (error) {
+    console.error('Error al eliminar nota:', error);
+    throw error;
+  }
 }
 
 // ─── Wellbeing ─────────────────────────────────────────────────

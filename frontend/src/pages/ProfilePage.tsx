@@ -31,14 +31,6 @@ import type { Profile } from '../types/profile';
 import { assetUrl } from '../platform';
 import { GENERO_OPTIONS, applyTheme, profileInitials } from '../types/profile';
 import { glassButton } from '../theme/glass';
-import {
-  loadNotificationPreferences,
-  NOTIFICATION_PREFERENCE_OPTIONS,
-  saveNotificationPreferences,
-  type NotificationPreferences,
-} from '../notifications/preferences';
-import { FormControlLabel, Switch } from '@mui/material';
-import { useOfflineSync } from '../offline/useOfflineSync';
 
 export default function ProfilePage() {
   const theme = useTheme();
@@ -94,16 +86,10 @@ export default function ProfilePage() {
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
   const [fechaNacimiento, setFechaNacimiento] = useState('');
-  const [genero, setGenero] = useState('');
+  const [genero, setGenero] = useState<string>(GENERO_OPTIONS[0]);
 
-  const [contrasenaActual, setContrasenaActual] = useState('');
-  const [contrasenaNueva, setContrasenaNueva] = useState('');
-  const [contrasenaConfirmacion, setContrasenaConfirmacion] = useState('');
-  const [passwordBusy, setPasswordBusy] = useState(false);
   const [reloadDialogOpen, setReloadDialogOpen] = useState(false);
   const [pendingTheme, setPendingTheme] = useState<'light' | 'dark'>('dark');
-  const [prefs, setPrefs] = useState<NotificationPreferences>(loadNotificationPreferences());
-  const { pending, syncing, syncNow, lastError } = useOfflineSync();
 
   useEffect(() => {
     api.profile.get().then((res) => {
@@ -117,24 +103,12 @@ export default function ProfilePage() {
     });
   }, []);
 
-  useEffect(() => {
-    if (lastError) setError(lastError);
-  }, [lastError]);
-
   function fillForm(data: Profile) {
     setProfile(data);
     setNombre(data.nombre);
     setTelefono(data.telefono || '');
     setFechaNacimiento(data.fechaNacimiento || '');
     setGenero(data.genero || GENERO_OPTIONS[0]);
-  }
-
-  function updatePref(key: keyof NotificationPreferences, patch: Partial<(typeof prefs)[typeof key]>) {
-    setPrefs((current) => {
-      const next = { ...current, [key]: { ...current[key], ...patch } };
-      saveNotificationPreferences(next);
-      return next;
-    });
   }
 
   async function onSaveProfile(e: FormEvent) {
@@ -156,23 +130,6 @@ export default function ProfilePage() {
       setMessage('Perfil actualizado correctamente');
     }
     setSaving(false);
-  }
-
-  async function onChangePassword(e: FormEvent) {
-    e.preventDefault();
-    setPasswordBusy(true);
-    setError(null);
-    setMessage(null);
-    const res = await api.profile.changePassword(contrasenaActual, contrasenaNueva, contrasenaConfirmacion);
-    if (!res.ok) {
-      setError(res.error || 'No se pudo cambiar la contraseña');
-    } else {
-      setMessage('Contraseña actualizada correctamente');
-      setContrasenaActual('');
-      setContrasenaNueva('');
-      setContrasenaConfirmacion('');
-    }
-    setPasswordBusy(false);
   }
 
   async function onToggleTheme() {
@@ -204,17 +161,6 @@ export default function ProfilePage() {
     }
     setPhotoBusy(false);
     if (fileRef.current) fileRef.current.value = '';
-  }
-
-  async function onSyncNow() {
-    setError(null);
-    setMessage(null);
-    if (pending === 0) {
-      setMessage('No hay cambios pendientes por sincronizar.');
-      return;
-    }
-    await syncNow();
-    setMessage('Sincronización iniciada. Espera a que el estado se actualice automáticamente.');
   }
 
   if (loading) {
@@ -302,7 +248,7 @@ export default function ProfilePage() {
                 required
                 fullWidth
               />
-              <TextField label="Correo" value={profile.correo} disabled fullWidth />
+              <TextField label="Correo" value={profile.correo ?? ''} disabled fullWidth />
             </Stack>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField
@@ -319,7 +265,7 @@ export default function ProfilePage() {
                 type="date"
                 value={fechaNacimiento}
                 onChange={(e) => setFechaNacimiento(e.target.value)}
-                InputLabelProps={{ shrink: true }}
+                slotProps={{ inputLabel: { shrink: true } }}
                 fullWidth
               />
             </Stack>
@@ -335,117 +281,6 @@ export default function ProfilePage() {
             </FormControl>
             <Button type="submit" variant="contained" disabled={saving} sx={{ alignSelf: 'flex-start' }}>
               {saving ? 'Guardando…' : 'Guardar cambios'}
-            </Button>
-          </Stack>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} sx={{ mb: 2 }}>
-            <Box>
-              <Typography variant="h6">Sincronización con la nube</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {pending > 0 ? `${pending} cambio${pending === 1 ? '' : 's'} pendiente${pending === 1 ? '' : 's'}` : 'Tus cambios ya están al día.'}
-              </Typography>
-            </Box>
-            <Button variant="outlined" onClick={() => void onSyncNow()} disabled={syncing || pending === 0}>
-              {syncing ? 'Sincronizando…' : 'Sincronizar ahora'}
-            </Button>
-          </Stack>
-          <Typography variant="h6" gutterBottom>
-            Notificaciones móviles
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Controla qué avisos recibe la app en tu dispositivo y con cuánta anticipación.
-          </Typography>
-          <Stack spacing={2}>
-            {NOTIFICATION_PREFERENCE_OPTIONS.map((option) => {
-              const current = prefs[option.key];
-              return (
-                <Box key={option.key} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }}>
-                    <Box>
-                      <Typography variant="subtitle2">{option.label}</Typography>
-                      <Typography variant="body2" color="text.secondary">{option.description}</Typography>
-                    </Box>
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={current.enabled}
-                          onChange={(_, checked) => updatePref(option.key, { enabled: checked })}
-                        />
-                      }
-                      label={current.enabled ? 'Activadas' : 'Desactivadas'}
-                    />
-                  </Stack>
-                  {(option.key === 'activities' || option.key === 'classes') && (
-                    <FormControl size="small" sx={{ mt: 1.5, maxWidth: 220 }}>
-                      <InputLabel>Anticipación</InputLabel>
-                      <Select
-                        label="Anticipación"
-                        value={String(current.leadMinutes ?? (option.key === 'activities' ? 60 : 15))}
-                        onChange={(e) => updatePref(option.key, { leadMinutes: Number(e.target.value) || 0 })}
-                      >
-                        {[5, 15, 30, 60, 120, 1440].map((value) => (
-                          <MenuItem key={value} value={value}>
-                            {value < 60
-                              ? `${value} min`
-                              : value === 60
-                                ? '1 hora'
-                                : value === 120
-                                  ? '2 horas'
-                                  : '1 día'}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  )}
-                </Box>
-              );
-            })}
-          </Stack>
-        </CardContent>
-      </Card>
-
-      <Card component="form" onSubmit={onChangePassword}>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>
-            Seguridad
-          </Typography>
-          <Stack spacing={2}>
-            <TextField
-              label="Contraseña actual"
-              type="password"
-              value={contrasenaActual}
-              onChange={(e) => setContrasenaActual(e.target.value)}
-              required
-              autoComplete="current-password"
-            />
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <TextField
-                label="Nueva contraseña"
-                type="password"
-                value={contrasenaNueva}
-                onChange={(e) => setContrasenaNueva(e.target.value)}
-                required
-                inputProps={{ minLength: 8 }}
-                autoComplete="new-password"
-                fullWidth
-              />
-              <TextField
-                label="Confirmar nueva"
-                type="password"
-                value={contrasenaConfirmacion}
-                onChange={(e) => setContrasenaConfirmacion(e.target.value)}
-                required
-                inputProps={{ minLength: 8 }}
-                autoComplete="new-password"
-                fullWidth
-              />
-            </Stack>
-            <Button type="submit" variant="outlined" disabled={passwordBusy} sx={{ alignSelf: 'flex-start' }}>
-              {passwordBusy ? 'Actualizando…' : 'Actualizar contraseña'}
             </Button>
           </Stack>
         </CardContent>

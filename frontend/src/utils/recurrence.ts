@@ -1,11 +1,10 @@
-export type RecurrenceKind = 'daily' | 'weekly' | 'monthly';
+export type RecurrenceKind = 'daily' | 'weekly' | 'monthly' | 'annual';
 
 export type RecurrenceConfig = {
   enabled: boolean;
   kind: RecurrenceKind;
   interval: number;
   endDate?: string | null;
-  maxOccurrences?: number;
 };
 
 export function buildOccurrences(
@@ -29,6 +28,8 @@ export function buildOccurrences(
       cursor = new Date(cursor.getTime() + interval * 24 * 60 * 60 * 1000);
     } else if (kind === 'weekly') {
       cursor = new Date(cursor.getTime() + interval * 7 * 24 * 60 * 60 * 1000);
+    } else if (kind === 'annual') {
+      cursor = new Date(Date.UTC(cursor.getUTCFullYear() + interval, cursor.getUTCMonth(), cursor.getUTCDate()));
     } else {
       cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + interval, cursor.getUTCDate()));
     }

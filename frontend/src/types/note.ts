@@ -21,13 +21,13 @@ export type NoteColor = {
 
 export const NOTE_COLORS: NoteColor[] = [
   { value: '#ffffff', label: 'Blanco', bgLight: '#ffffff', bgDark: '#1e293b' },
-  { value: '#fca5a5', label: 'Rojo', bgLight: '#fee2e2', bgDark: '#7f1d1d' },
-  { value: '#fdba74', label: 'Naranja', bgLight: '#ffedd5', bgDark: '#7c2d12' },
-  { value: '#fef08a', label: 'Amarillo', bgLight: '#fef9c3', bgDark: '#713f12' },
-  { value: '#86efac', label: 'Verde', bgLight: '#dcfce7', bgDark: '#14532d' },
-  { value: '#99f6e4', label: 'Teal', bgLight: '#ccfbf1', bgDark: '#134e5e' },
-  { value: '#93c5fd', label: 'Azul', bgLight: '#dbeafe', bgDark: '#1e3a8a' },
-  { value: '#a5b4fc', label: 'Índigo', bgLight: '#e0e7ff', bgDark: '#312e81' },
-  { value: '#c084fc', label: 'Morado', bgLight: '#f3e8ff', bgDark: '#581c87' },
-  { value: '#f472b6', label: 'Rosa', bgLight: '#fce7f3', bgDark: '#831843' },
+  { value: '#ef4444', label: 'Rojo', bgLight: '#fee2e2', bgDark: '#991b1b' },
+  { value: '#f97316', label: 'Naranja', bgLight: '#ffedd5', bgDark: '#9a3412' },
+  { value: '#eab308', label: 'Amarillo', bgLight: '#fef9c3', bgDark: '#854d0e' },
+  { value: '#22c55e', label: 'Verde', bgLight: '#dcfce7', bgDark: '#166534' },
+  { value: '#14b8a6', label: 'Teal', bgLight: '#ccfbf1', bgDark: '#115e59' },
+  { value: '#3b82f6', label: 'Azul', bgLight: '#dbeafe', bgDark: '#1e40af' },
+  { value: '#6366f1', label: 'Índigo', bgLight: '#e0e7ff', bgDark: '#3730a3' },
+  { value: '#a855f7', label: 'Morado', bgLight: '#f3e8ff', bgDark: '#6b21a8' },
+  { value: '#ec4899', label: 'Rosa', bgLight: '#fce7f3', bgDark: '#9d174d' },
 ];

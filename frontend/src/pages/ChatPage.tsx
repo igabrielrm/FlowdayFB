@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import {
   Alert,
@@ -10,6 +10,7 @@ import {
   CircularProgress,
   Divider,
   IconButton,
+  InputBase,
   List,
   ListItemButton,
   ListItemText,
@@ -25,6 +26,8 @@ import SendRoundedIcon from '@mui/icons-material/SendRounded';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import SearchIcon from '@mui/icons-material/Search';
+import CloseIcon from '@mui/icons-material/Close';
 import PageHeader from '../components/mui/PageHeader';
 import PageStack from '../components/mui/PageStack';
 import { glassSurface } from '../theme/glass';
@@ -63,6 +66,7 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [convSearch, setConvSearch] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Show loading while auth is initializing
@@ -154,6 +158,14 @@ export default function ChatPage() {
     (f) => f.uid === selectedId,
   );
 
+  const filteredConversations = useMemo(() => {
+    if (!convSearch.trim()) return conversations;
+    const q = convSearch.trim().toLowerCase();
+    return conversations.filter(
+      (c) => c.user.nombre?.toLowerCase().includes(q) || c.user.correo?.toLowerCase().includes(q),
+    );
+  }, [conversations, convSearch]);
+
   async function send(e: FormEvent) {
     e.preventDefault();
     if (!selectedId || !text.trim()) return;
@@ -214,18 +226,40 @@ export default function ChatPage() {
               </Typography>
             </Box>
             <Divider />
+            <Box sx={{ px: 1.5, pt: 1 }}>
+              <InputBase
+                value={convSearch}
+                onChange={(e) => setConvSearch(e.target.value)}
+                placeholder="Buscar contacto…"
+                fullWidth
+                sx={{
+                  fontSize: '0.85rem',
+                  px: 1,
+                  py: 0.5,
+                  borderRadius: 2,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                }}
+                startAdornment={<SearchIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />}
+                endAdornment={convSearch ? (
+                  <IconButton size="small" onClick={() => setConvSearch('')} sx={{ p: 0.25 }}>
+                    <CloseIcon sx={{ fontSize: 14 }} />
+                  </IconButton>
+                ) : null}
+              />
+            </Box>
             <Box sx={{ flex: 1, overflow: 'auto' }}>
               {loading ? (
                 <Stack alignItems="center" py={4}>
                   <CircularProgress size={28} />
                 </Stack>
-              ) : conversations.length === 0 ? (
+              ) : filteredConversations.length === 0 ? (
                 <Typography variant="body2" color="text.secondary" p={2.5}>
-                  Conecta con compañeros en Comunidad para chatear.
+                  {convSearch.trim() ? 'Sin resultados.' : 'Conecta con compañeros en Comunidad para chatear.'}
                 </Typography>
               ) : (
                 <List disablePadding>
-                  {conversations.map((c) => (
+                  {filteredConversations.map((c) => (
                     <ListItemButton
                       key={c.user.uid}
                       selected={selectedId === c.user.uid}

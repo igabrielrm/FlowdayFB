@@ -57,6 +57,7 @@ function RelationActions({
         <Chip label="Solicitud enviada" color="info" size="small" />
         {conexionId && (
           <Button
+            type="button"
             size="small"
             disabled={busyId === itemId}
             onClick={() => onAction('cancel', itemId, conexionId)}
@@ -71,6 +72,7 @@ function RelationActions({
     return (
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
         <Button
+          type="button"
           size="small"
           variant="contained"
           disabled={busyId === itemId}
@@ -79,6 +81,7 @@ function RelationActions({
           Aceptar
         </Button>
         <Button
+          type="button"
           size="small"
           disabled={busyId === itemId}
           onClick={() => onAction('reject', itemId, conexionId)}
@@ -90,6 +93,7 @@ function RelationActions({
   }
   return (
     <Button
+      type="button"
       size="small"
       variant="contained"
       disabled={busyId === itemId}
@@ -195,13 +199,13 @@ export default function CommunityPage() {
     setLoading(true);
     setError(null);
     try {
-      const results = await searchUsers(q || '');
+      const results = await searchUsers(q || '', user?.id ? String(user.id) : undefined);
       setUsers(results);
     } catch (err) {
       setError('No se pudieron cargar los usuarios');
     }
     setLoading(false);
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     load(debouncedQuery.trim() || undefined);
@@ -216,6 +220,8 @@ export default function CommunityPage() {
       const pending = pendingRequests.find((p) => String(p.id) === itemId);
       if (friend) return { ...u, status: friend.status, conexionId: friend.conexionId };
       if (pending) return { ...u, status: pending.status, conexionId: pending.conexionId };
+      // Use optimistic status from users array if set
+      if ((u as any).status && (u as any).status !== 'none') return u;
       return u;
     });
   }, [users, friends, pendingRequests, query]);
@@ -225,14 +231,21 @@ export default function CommunityPage() {
     setError(null);
     let res: string | null;
     try {
-      if (action === 'request') res = await sendFriendRequest(userId);
+      if (action === 'request') {
+        res = await sendFriendRequest(userId);
+        if (!res) {
+          // Optimistically update: mark user as pending_sent in search results
+          setUsers((prev) => prev.map((u) =>
+            String(u.id) === userId ? { ...u, status: 'pending_sent', conexionId: userId } : u,
+          ));
+        }
+      }
       else if (action === 'accept' && conexionId) res = await acceptFriendRequest(conexionId);
       else if (action === 'reject' && conexionId) res = await rejectFriendRequest(conexionId);
       else if (action === 'cancel' && conexionId) res = await cancelFriendRequest(conexionId);
       else res = 'Acción no válida';
 
       if (res) setError(res);
-      else if (debouncedQuery.trim()) await load(debouncedQuery.trim() || undefined);
     } catch (err) {
       setError('No se pudo completar la acción');
     }
@@ -257,6 +270,42 @@ export default function CommunityPage() {
             <Stack spacing={2}>
               {pendingRequests.map((item) => (
                 <UserRow key={String(item.id)} item={item} busyId={busyId} onAction={handleAction} />
+              ))}
+            </Stack>
+          </CardContent>
+        </Card>
+      )}
+
+      {friends.length > 0 && (
+        <Card>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>
+              Amigos ({friends.length})
+            </Typography>
+            <Stack spacing={1.5}>
+              {friends.map((f) => (
+                <Stack
+                  key={String(f.id)}
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={2}
+                  alignItems={{ sm: 'center' }}
+                  sx={{ p: 1.5, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+                >
+                  <Avatar sx={{ width: 40, height: 40, bgcolor: 'success.main', fontSize: 14 }}>
+                    {userInitials(f.nombre)}
+                  </Avatar>
+                  <Box flex={1} minWidth={0}>
+                    <Typography fontWeight={700} noWrap>{f.nombre}</Typography>
+                    <Typography variant="body2" color="text.secondary" noWrap>{f.correo}</Typography>
+                  </Box>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => navigate(`/chat?user=${f.id}`)}
+                  >
+                    Chat
+                  </Button>
+                </Stack>
               ))}
             </Stack>
           </CardContent>

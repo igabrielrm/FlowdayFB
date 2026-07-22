@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import {
   browserLocalPersistence,
   createUserWithEmailAndPassword,
+  deleteUser,
   EmailAuthProvider,
   getAuth,
   GoogleAuthProvider,
@@ -25,6 +26,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getFirestore,
   initializeFirestore,
   orderBy,
   persistentLocalCache,
@@ -66,11 +68,18 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const firestore = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager(),
-  }),
-});
+
+let firestore: Firestore;
+try {
+  firestore = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
+  });
+} catch {
+  // Fallback: use default Firestore instance (e.g. Android WebView)
+  firestore = getFirestore(app);
+}
 
 let persistenceEnabled = false;
 
@@ -175,6 +184,11 @@ export const firebaseClient = {
   async updatePassword(password: string) {
     if (!auth.currentUser) throw new Error('No hay usuario autenticado');
     return updatePassword(auth.currentUser, password);
+  },
+  async deleteAccount() {
+    const user = auth.currentUser;
+    if (!user) throw new Error('No hay usuario autenticado');
+    return deleteUser(user);
   },
   async requestEmailVerification() {
     if (!auth.currentUser) throw new Error('No hay usuario autenticado');

@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { firebaseClient, normalizeSnapshot } from './client';
 import type { CommunityStats, CommunityUser } from '../types/community';
 import type { UsuarioDto } from '../api/client';
@@ -246,9 +246,15 @@ export const rejectFriendRequest = async (conexionId: string): Promise<string | 
   return ok ? null : 'No se pudo rechazar la solicitud';
 };
 
-export const cancelFriendRequest = async (conexionId: string): Promise<string | null> => {
-  const ok = await rejectConnectionRequest(conexionId);
-  return ok ? null : 'No se pudo cancelar la solicitud';
+export const cancelFriendRequest = async (targetUid: string): Promise<string | null> => {
+  const uid = currentUid();
+  if (!uid) return 'No hay usuario autenticado';
+  try {
+    await deleteDoc(doc(firebaseClient.firestore, 'users', targetUid, 'connectionRequests', uid));
+    return null;
+  } catch {
+    return 'No se pudo cancelar la solicitud';
+  }
 };
 
 export const removeFriend = async (friendUid: string): Promise<string | null> => {
@@ -256,14 +262,55 @@ export const removeFriend = async (friendUid: string): Promise<string | null> =>
   return ok ? null : 'No se pudo eliminar la conexión';
 };
 
-// Stub subscriptions (the CommunityPage calls these but they'll just noop)
-export const subscribeToFriendRequests = (callback: (requests: any[]) => void, onError?: (err: any) => void) => {
-  callback([]);
-  return () => {};
+// Real-time subscriptions for CommunityPage
+export const subscribeToFriendRequests = (callback: (requests: FriendUser[]) => void, onError?: (err: any) => void): (() => void) => {
+  const uid = currentUid();
+  if (!uid) { callback([]); return () => {}; }
+
+  return onSnapshot(
+    query(
+      collection(firebaseClient.firestore, 'users', uid, 'connectionRequests'),
+      where('status', '==', 'pending'),
+    ),
+    async (snapshot) => {
+      const requests: FriendUser[] = [];
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        const fromUid = data.from as string;
+        const user = await getUserDto(fromUid);
+        if (user) {
+          requests.push({ ...user, status: 'pending_received', conexionId: fromUid });
+        }
+      }
+      callback(requests);
+    },
+    onError,
+  );
 };
 
-export const subscribeToFriends = (callback: (friends: any[]) => void, onError?: (err: any) => void): (() => void)[] => {
-  callback([]);
-  return [() => {}];
+export const subscribeToFriends = (callback: (friends: FriendUser[]) => void, onError?: (err: any) => void): (() => void)[] => {
+  const uid = currentUid();
+  if (!uid) { callback([]); return [() => {}]; }
+
+  const unsubAccepted = onSnapshot(
+    query(
+      collection(firebaseClient.firestore, 'users', uid, 'connections'),
+      where('status', '==', 'accepted'),
+    ),
+    async (snapshot) => {
+      const friends: FriendUser[] = [];
+      for (const docSnap of snapshot.docs) {
+        const friendUid = docSnap.id;
+        const user = await getUserDto(friendUid);
+        if (user) {
+          friends.push({ ...user, status: 'accepted', conexionId: friendUid });
+        }
+      }
+      callback(friends);
+    },
+    onError,
+  );
+
+  return [unsubAccepted];
 };
 

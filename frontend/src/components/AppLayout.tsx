@@ -29,6 +29,7 @@ import ChatOutlinedIcon from '@mui/icons-material/ChatOutlined';
 import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import NoteAltOutlinedIcon from '@mui/icons-material/NoteAltOutlined';
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { useAuth } from '../auth/AuthContext';
 import { api } from '../api/client';
 import NotificationsBell from './NotificationsBell';
@@ -50,6 +51,7 @@ const NAV = [
   { to: '/community', label: 'Comunidad', end: false, icon: <GroupsOutlinedIcon /> },
   { to: '/chat', label: 'Chat', end: false, icon: <ChatOutlinedIcon /> },
   { to: '/profile', label: 'Perfil', end: false, icon: <PersonOutlineOutlinedIcon /> },
+  { to: '/settings', label: 'Configuración', end: false, icon: <SettingsOutlinedIcon /> },
 ];
 
 export default function AppLayout() {

@@ -9,7 +9,6 @@ import {
   Chip,
   Divider,
   IconButton,
-  Paper,
   Stack,
   Typography,
   useTheme,
@@ -17,20 +16,18 @@ import {
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import NoteAltOutlinedIcon from '@mui/icons-material/NoteAltOutlined';
+
 import { api } from '../api/client';
 import { OFFLINE_QUEUE_EVENT } from '../events';
 import { readApiGet } from '../offline/cache';
 import ActivityDetailModal from '../components/ActivityDetailModal';
-import RescheduleModal from '../components/RescheduleModal';
 import PageHeader from '../components/mui/PageHeader';
 import PageStack from '../components/mui/PageStack';
 import { glassButton, glassSurface } from '../theme/glass';
 import type { ActividadListItem, PriorityAlert } from '../types/activity';
 import { estadoLabel, formatDate, tipoLabel } from '../types/activity';
 import type { ScheduleAlert } from '../types/schedule';
-import type { Note } from '../types/note';
-import { NOTE_COLORS } from '../types/note';
+
 import { localDateIso, shiftLocalDateIso } from '../utils/localDate';
 
 function todayIso() {
@@ -55,10 +52,8 @@ export default function DashboardPage() {
   const [dayItems, setDayItems] = useState<ActividadListItem[]>([]);
   const [alerts, setAlerts] = useState<PriorityAlert[]>([]);
   const [scheduleAlert, setScheduleAlert] = useState<ScheduleAlert | null>(null);
-  const [recentNote, setRecentNote] = useState<Note | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailId, setDetailId] = useState<number | null>(null);
-  const [rescheduleOpen, setRescheduleOpen] = useState(false);
 
   const loadAlerts = useCallback(async () => {
     const alertsRes = await api.activities.priorityAlerts();
@@ -69,24 +64,16 @@ export default function DashboardPage() {
     // Load from cache first for instant UI
     const cachedDay = readApiGet<ActividadListItem[]>(`/api/v1/activities/by-date?fecha=${viewDate}`);
     const cachedSched = readApiGet<ScheduleAlert>('/api/v1/schedule/alert');
-    const cachedNotes = readApiGet<Note[]>('/api/v1/notas');
     if (cachedDay) setDayItems(cachedDay);
     if (cachedSched) setScheduleAlert(cachedSched);
-    if (cachedNotes && cachedNotes.length > 0) {
-      setRecentNote(cachedNotes.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0]);
-    }
     setLoading(false);
     // Then fetch from server in background
-    const [dayRes, schedRes, notesRes] = await Promise.all([
+    const [dayRes, schedRes] = await Promise.all([
       api.activities.byDate(viewDate),
       api.schedule.alert(),
-      api.notes.list(),
     ]);
     if (dayRes.ok && dayRes.data) setDayItems(dayRes.data);
     if (schedRes.ok) setScheduleAlert(schedRes.data as ScheduleAlert | null);
-    if (notesRes.ok && notesRes.data && notesRes.data.length > 0) {
-      setRecentNote(notesRes.data.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0]);
-    }
   }, [viewDate]);
 
   useEffect(() => {
@@ -116,14 +103,9 @@ export default function DashboardPage() {
         title="Inicio"
         subtitle={`Agenda — ${formatDate(viewDate)}`}
         actions={
-          <>
-            <Button onClick={() => setRescheduleOpen(true)} sx={glassButton(theme)}>
-              Reagendar
-            </Button>
-            <Button variant="contained" component={RouterLink} to="/activities/new">
-              + Nueva
-            </Button>
-          </>
+          <Button variant="contained" component={RouterLink} to="/activities/new">
+            + Nueva
+          </Button>
         }
       />
 
@@ -186,56 +168,6 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {recentNote && (
-        <Card sx={glassSurface(theme)}>
-          <CardContent sx={{ pb: 2.5 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-              <NoteAltOutlinedIcon color="primary" />
-              <Typography variant="h6" fontWeight={700}>
-                Nota reciente
-              </Typography>
-            </Box>
-            <Paper
-              elevation={0}
-              component={RouterLink}
-              to="/notes"
-              sx={{
-                p: 2,
-                borderRadius: 2,
-                bgcolor: NOTE_COLORS.find((c) => c.value === recentNote.color)?.bgLight ?? '#fff',
-                border: '1.5px solid',
-                borderColor: 'divider',
-                cursor: 'pointer',
-                textDecoration: 'none',
-                color: 'inherit',
-                display: 'block',
-                '&:hover': { borderColor: 'primary.main' },
-              }}
-            >
-              {recentNote.titulo && (
-                <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 0.5 }}>
-                  {recentNote.titulo}
-                </Typography>
-              )}
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{
-                  display: '-webkit-box',
-                  WebkitLineClamp: 3,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  whiteSpace: 'pre-wrap',
-                  lineHeight: 1.6,
-                }}
-              >
-                {recentNote.contenido || <em style={{ opacity: 0.5 }}>Nota vacía</em>}
-              </Typography>
-            </Paper>
-          </CardContent>
-        </Card>
-      )}
-
       <Card sx={glassSurface(theme, { strong: true })}>
         <Box
           sx={{
@@ -251,7 +183,7 @@ export default function DashboardPage() {
           <IconButton onClick={() => setViewDate(shiftDate(viewDate, -1))} sx={glassButton(theme)}>
             <ChevronLeftIcon />
           </IconButton>
-          <Box textAlign="center" sx={{ minWidth: 180 }}>
+          <Box sx={{ minWidth: 180, textAlign: 'center' }}>
             <Typography variant="h6" fontWeight={700}>
               {agendaTitle(viewDate)}
             </Typography>
@@ -327,7 +259,6 @@ export default function DashboardPage() {
       </Card>
 
       <ActivityDetailModal activityId={detailId} onClose={() => setDetailId(null)} onChanged={() => { loadDay(); loadAlerts(); }} />
-      <RescheduleModal open={rescheduleOpen} onClose={() => setRescheduleOpen(false)} onDone={() => { loadDay(); loadAlerts(); }} />
     </PageStack>
   );
 }

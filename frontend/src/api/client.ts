@@ -14,7 +14,7 @@ export type ApiResponse<T> = {
   meta?: Record<string, unknown>;
 };
 
-import type { ActividadDetail, ActividadListItem, CreateActividadPayload, PriorityAlert, ReschedulableItem, UpdateActividadPayload } from '../types/activity';
+import type { ActividadDetail, ActividadListItem, CreateActividadPayload, PriorityAlert, UpdateActividadPayload } from '../types/activity';
 import type { NotificationItem } from '../notifications/types';
 import type { Profile, UpdateProfilePayload } from '../types/profile';
 import type { CommunityStats, CommunityUser } from '../types/community';
@@ -252,22 +252,6 @@ export const api = {
         return ok([]);
       }
     },
-    reschedulable: async () => {
-      try {
-        const items = await firebaseData.reschedulable();
-        return ok(items);
-      } catch {
-        return ok([]);
-      }
-    },
-    reschedule: async (id: number | string, fecha: string, hora?: string) => {
-      try {
-        const detail = await firebaseData.reschedule(String(id), fecha, hora);
-        return detail ? ok(detail) : fail<ActividadDetail>('No se pudo reagendar');
-      } catch (error: unknown) {
-        return fail<ActividadDetail>(String((error as Error).message || 'No se pudo reagendar la actividad'));
-      }
-    },
   },
 
   // ─── Schedule (guest accessible) ────────────────────────────────
@@ -371,10 +355,18 @@ export const api = {
     changePassword: async (currentPassword: string, nueva: string, confirmacion: string) => {
       if (nueva !== confirmacion) return fail<void>('Las contraseñas no coinciden');
       try {
+        const user = firebaseClient.auth.currentUser;
+        if (!user || !user.email) return fail<void>('No hay usuario autenticado');
+        const { EmailAuthProvider, reauthenticateWithCredential } = await import('firebase/auth');
+        const credential = EmailAuthProvider.credential(user.email, currentPassword);
+        await reauthenticateWithCredential(user, credential);
         await firebaseClient.updatePassword(nueva);
         return ok(null);
       } catch (error: unknown) {
-        return fail<void>(String((error as Error).message || 'No se pudo cambiar la contraseña'));
+        const err = error as { code?: string; message?: string };
+        if (err.code === 'auth/wrong-password') return fail<void>('La contraseña actual es incorrecta');
+        if (err.code === 'auth/requires-recent-login') return fail<void>('Debes haber iniciado sesión recientemente. Cierra sesión y vuelve a iniciar antes de cambiar la contraseña.');
+        return fail<void>(String(err.message || 'No se pudo cambiar la contraseña'));
       }
     },
     changeTheme: async (tema: string) => {

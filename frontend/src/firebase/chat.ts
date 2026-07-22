@@ -108,11 +108,10 @@ export async function getConversations(friends: FriendUser[]): Promise<Conversat
   const uid = currentUid();
   const results: ConversationData[] = [];
 
-  // Get all conversations for this user
+  // Get all conversations for this user (no orderBy to avoid missing index)
   const convQuery = query(
     collection(firebaseClient.firestore, 'conversaciones'),
     where('participantes', 'array-contains', uid),
-    orderBy('ultimaFecha', 'desc'),
   );
 
   try {
@@ -146,6 +145,14 @@ export async function getConversations(friends: FriendUser[]): Promise<Conversat
   } catch (error) {
     console.error('Error getting conversations:', error);
   }
+
+  // Sort by last message date descending in memory
+  results.sort((a, b) => {
+    if (!a.ultimaFecha && !b.ultimaFecha) return 0;
+    if (!a.ultimaFecha) return 1;
+    if (!b.ultimaFecha) return -1;
+    return b.ultimaFecha.localeCompare(a.ultimaFecha);
+  });
 
   return results;
 }

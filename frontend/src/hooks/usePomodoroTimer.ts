@@ -14,7 +14,7 @@ type StoredState = {
   secondsLeft: number;
   running: boolean;
   endsAt: number | null;
-  linkedActivityId: number | '';
+  linkedActivityId: number | string | '';
   cycleCount: number;
 };
 
@@ -53,7 +53,7 @@ export function usePomodoroTimer(initialWorkMinutes: number) {
     }
     return false;
   });
-  const [linkedActivityId, setLinkedActivityId] = useState<number | ''>(stored?.linkedActivityId ?? '');
+  const [linkedActivityId, setLinkedActivityId] = useState<number | string | ''>(stored?.linkedActivityId ?? '');
 
   const endsAtRef = useRef<number | null>(
     stored?.running && stored.endsAt && stored.endsAt > Date.now() ? stored.endsAt : null,
@@ -230,7 +230,7 @@ export function usePomodoroTimer(initialWorkMinutes: number) {
     secondsLeft,
     running,
     linkedActivityId,
-    setLinkedActivityId: (id: number | '') => {
+    setLinkedActivityId: (id: number | string | '') => {
       linkedIdRef.current = id;
       setLinkedActivityId(id);
       persist({ linkedActivityId: id });

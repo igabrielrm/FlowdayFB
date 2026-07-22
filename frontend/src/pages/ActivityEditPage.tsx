@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { Alert, Button, Card, CardContent, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material';
 import { api } from '../api/client';
+import { firebaseClient } from '../firebase/client';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import ActivityForm, { detailToFormValues } from '../components/ActivityForm';
 import PageHeader from '../components/mui/PageHeader';
 import PageStack from '../components/mui/PageStack';
@@ -73,6 +75,29 @@ export default function ActivityEditPage() {
         onSubmit={async (payload) => {
           const res = await api.activities.update(activityId, payload);
           if (!res.ok) return res.error || 'No se pudo actualizar';
+
+          // Notify linked companions about the edit
+          const companionIds = payload.companerosIds ?? detail.companerosIds ?? [];
+          if (companionIds.length > 0) {
+            const currentUid = firebaseClient.auth.currentUser?.uid;
+            const ownerName = firebaseClient.auth.currentUser?.displayName ?? 'Un compañero';
+            const notifPromises = companionIds
+              .filter((cid) => String(cid) !== currentUid)
+              .map((cid) => {
+                const notifRef = doc(firebaseClient.firestore, 'users', String(cid), 'notifications', `${activityId}_edit_${Date.now()}`);
+                return setDoc(notifRef, {
+                  type: 'activity_edit',
+                  titulo: payload.titulo ?? detail.titulo,
+                  mensaje: `${ownerName} actualizó la actividad "${payload.titulo ?? detail.titulo}"`,
+                  actividadId: activityId,
+                  fromUid: currentUid,
+                  read: false,
+                  createdAt: serverTimestamp(),
+                });
+              });
+            await Promise.allSettled(notifPromises);
+          }
+
           navigate('/activities');
           return null;
         }}

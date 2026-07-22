@@ -48,14 +48,7 @@ export type PriorityAlert = {
   prioridad?: string | null;
 };
 
-export type ReschedulableItem = {
-  id: number | string;
-  titulo: string;
-  tipo: string;
-  fechaInicio?: string | null;
-  horaInicio?: string | null;
-  etiqueta?: string;
-};
+
 
 export const ACTIVITY_COLORS = [
   { value: '#22c55e', label: 'Verde' },
@@ -105,7 +98,6 @@ export const ACTIVITY_TYPES = [
 
 export const ACTIVITY_STATES = [
   { value: 'PENDIENTE', label: 'Pendiente' },
-  { value: 'EN_PROCESO', label: 'En proceso' },
   { value: 'COMPLETADA', label: 'Completada' },
 ] as const;
 

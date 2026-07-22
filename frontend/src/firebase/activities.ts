@@ -18,6 +18,22 @@ import { firebaseClient } from './client';
 import { deepSanitizeForFirestore } from './data';
 import type { ActividadDetail, ActividadListItem } from '../types/activity';
 
+async function notifyUser(targetUid: string, titulo: string, mensaje: string, enlace?: string) {
+  try {
+    const ref = doc(collection(firebaseClient.firestore, 'users', targetUid, 'notifications'));
+    await setDoc(ref, {
+      tipo: 'ACTIVIDAD',
+      titulo,
+      mensaje,
+      enlace: enlace ?? null,
+      leida: false,
+      createdAt: serverTimestamp(),
+    });
+  } catch {
+    // Best-effort notification
+  }
+}
+
 // Función modificada para soportar modo invitado
 function currentUid(): string | null {
   const user = firebaseClient.auth.currentUser;
@@ -128,15 +144,24 @@ export async function createActivity(
 
   await setDoc(newDoc, data as any);
 
-  // If shared, also add to shared collections
+  // If shared, also add to shared collections and notify
   if (compartidoCon.length > 0) {
+    const ownerName = firebaseClient.auth.currentUser?.displayName ?? 'Alguien';
     await Promise.all(
       compartidoCon.map((targetUid) =>
-        setDoc(doc(firebaseClient.firestore, 'users', targetUid, 'sharedActivities', newDoc.id), {
-          ...data,
-          propietarioUid: uid,
-          actividadId: newDoc.id,
-        } as any),
+        Promise.all([
+          setDoc(doc(firebaseClient.firestore, 'users', targetUid, 'sharedActivities', newDoc.id), {
+            ...data,
+            propietarioUid: uid,
+            actividadId: newDoc.id,
+          } as any),
+          notifyUser(
+            targetUid,
+            'Actividad compartida',
+            `${ownerName} te compartió la actividad "${data.titulo}"`,
+            `/activities/${newDoc.id}/edit`,
+          ),
+        ]),
       ),
     );
   }

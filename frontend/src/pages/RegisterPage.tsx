@@ -103,7 +103,7 @@ export default function RegisterPage() {
           type="date"
           value={fechaNacimiento}
           onChange={(e) => setFechaNacimiento(e.target.value)}
-          InputLabelProps={{ shrink: true }}
+          slotProps={{ inputLabel: { shrink: true } }}
         />
         <FormControl>
           <InputLabel>Género</InputLabel>
